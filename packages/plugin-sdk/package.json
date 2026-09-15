@@ -1,6 +1,6 @@
 {
   "name": "@visualautomate/plugin-sdk",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Types and a local runner for building VisualAutomate plugins.",
   "license": "MIT",
   "type": "module",
@@ -35,7 +35,7 @@
   },
   "devDependencies": {
     "@types/node": "^22",
-    "esbuild": "^0.23.0",
+    "esbuild": "^0.28.2",
     "typescript": "^5"
   },
   "repository": {

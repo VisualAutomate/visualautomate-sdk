@@ -1,6 +1,6 @@
 {
   "name": "@visualautomate/cli",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Build and publish VisualAutomate plugins.",
   "license": "MIT",
   "type": "module",
@@ -26,7 +26,7 @@
     "node": ">=20"
   },
   "dependencies": {
-    "esbuild": "^0.23.0"
+    "esbuild": "^0.28.2"
   },
   "devDependencies": {
     "@types/node": "^22",
