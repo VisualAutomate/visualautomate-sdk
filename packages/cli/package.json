@@ -1,0 +1,44 @@
+{
+  "name": "@visualautomate/cli",
+  "version": "0.4.0",
+  "description": "Build and publish VisualAutomate plugins.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "visualautomate": "./dist/index.js",
+    "va": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node build.mjs",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "visualautomate",
+    "cli",
+    "plugin",
+    "deploy"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "esbuild": "^0.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "typescript": "^5"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VisualAutomate/visualautomate-sdk.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://developers.visualautomate.com",
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -1,0 +1,173 @@
+/**
+ * The CLI, run as a person runs it: the built binary, in a fresh directory.
+ */
+
+import { test } from "node:test"
+import assert from "node:assert/strict"
+import { spawnSync } from "node:child_process"
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { fileURLToPath } from "node:url"
+import { build } from "esbuild"
+
+import { validatePluginCode } from "../packages/plugin-sdk/dist/index.mjs"
+
+const CLI = fileURLToPath(new URL("../packages/cli/dist/index.js", import.meta.url))
+
+function va(cwd, ...args) {
+    const run = spawnSync(process.execPath, [CLI, ...args], { cwd, encoding: "utf8" })
+    return { code: run.status, out: `${run.stdout}${run.stderr}` }
+}
+
+function scratch() {
+    const dir = mkdtempSync(join(tmpdir(), "va-cli-"))
+    test.after(() => rmSync(dir, { recursive: true, force: true }))
+    return dir
+}
+
+function write(dir, files) {
+    for (const [path, text] of Object.entries(files)) {
+        mkdirSync(join(dir, path, ".."), { recursive: true })
+        writeFileSync(join(dir, path), typeof text === "string" ? text : JSON.stringify(text))
+    }
+}
+
+const passing = (greeting) =>
+    `module.exports = { execute: async (input, config) => ({ output: "success", data: { text: "${greeting} " + config.name } }) }\n`
+
+test("every template init writes passes the platform's checks and runs", () => {
+    const dir = scratch()
+    for (const template of ["blank", "http-request", "file"]) {
+        assert.equal(va(dir, "init", template, "--template", template).code, 0)
+        const run = va(join(dir, template), "test")
+        assert.doesNotMatch(run.out, /refused/, `${template}: ${run.out}`)
+        if (template !== "http-request") assert.equal(run.code, 0, `${template}: ${run.out}`)
+    }
+    // Needs somebody's connected account, which is not simulated — but its code is fine.
+    va(dir, "init", "connection", "--template", "connection")
+    assert.doesNotMatch(va(join(dir, "connection"), "test").out, /refused/)
+})
+
+test("a TypeScript plugin bundles to code the platform accepts", async () => {
+    const dir = scratch()
+    write(dir, {
+        "helper.ts": "export const shout = (s: string) => s.toUpperCase()\n",
+        "plugin.ts":
+            'import { shout } from "./helper"\n'
+            + 'export default { async execute(input: unknown, config: { name: string }) { return { output: "success", data: { text: shout(config.name) } } } }\n',
+        "plugin.json": { name: "ts", version: "1.0.0" },
+        "manifest.json": { name: "ts", outputs: ["success"] },
+        "test.json": { config: { name: "brent" }, input: {}, expectOutput: "success" },
+    })
+    const run = va(dir, "test")
+    assert.equal(run.code, 0, run.out)
+    assert.match(run.out, /"text": "BRENT"/)
+})
+
+test("a plugin's GitHub repository is tested the way the push check tests it", () => {
+    const dir = scratch()
+    write(dir, {
+        "manifest.json": { name: "hello", outputs: ["success", "error"] },
+        "index.js": passing("Hello"),
+        "visualautomate.test.json": { config: { name: "Brent" }, input: {}, expectOutput: "success" },
+    })
+    const run = va(dir, "test")
+    assert.equal(run.code, 0, run.out)
+    assert.match(run.out, /✓ passed/)
+    assert.match(run.out, /"text": "Hello Brent"/)
+
+    write(dir, { "visualautomate.test.json": { config: { name: "Brent" }, input: {}, expectOutput: "error" } })
+    const wrongPort = va(dir, "test")
+    assert.equal(wrongPort.code, 1)
+    assert.match(wrongPort.out, /expected error/)
+})
+
+test("an app's repository runs every module, or the one asked for", () => {
+    const dir = scratch()
+    write(dir, {
+        "modules/send/manifest.json": { name: "send", outputs: ["success"] },
+        "modules/send/index.js": passing("Sent"),
+        "modules/send/visualautomate.test.json": { config: { name: "a" }, input: {} },
+        "modules/read/manifest.json": { name: "read", outputs: ["success"] },
+        "modules/read/index.js": 'const fs = require("fs")\n' + passing("Read"),
+    })
+
+    const all = va(dir, "test")
+    assert.equal(all.code, 1)
+    assert.match(all.out, /▸ modules\/read[\s\S]*requires "fs"/)
+    assert.match(all.out, /▸ modules\/send[\s\S]*✓ passed/)
+    assert.match(all.out, /1 of 2 passed/)
+
+    const one = va(dir, "test", "--module", "send")
+    assert.equal(one.code, 0, one.out)
+    assert.doesNotMatch(one.out, /modules\/read/)
+
+    assert.match(va(dir, "test", "--module", "nope").out, /No module "nope"/)
+})
+
+test("an allowed package that is not installed says how to install it", () => {
+    const dir = scratch()
+    write(dir, {
+        "manifest.json": { name: "p", outputs: ["success"] },
+        "index.js": 'const R = require("ramda")\n' + passing("x"),
+    })
+    const run = va(dir, "test")
+    assert.equal(run.code, 1)
+    assert.match(run.out, /npm install --save-dev ramda@/)
+})
+
+test("a malformed test file stops the run instead of running with nothing", () => {
+    const dir = scratch()
+    write(dir, {
+        "manifest.json": { name: "p", outputs: ["success"] },
+        "index.js": passing("x"),
+        "visualautomate.test.json": "{ not json",
+    })
+    const run = va(dir, "test")
+    assert.equal(run.code, 1)
+    assert.match(run.out, /is not valid JSON/)
+})
+
+test("the ES-module rewrite leaves nothing the platform refuses", async () => {
+    const { toSandboxModule } = await import(
+        "data:text/javascript," + encodeURIComponent(
+            (await build({ entryPoints: [fileURLToPath(new URL("../packages/cli/src/sandbox-module.ts", import.meta.url))], write: false, format: "esm", bundle: true, platform: "node" })).outputFiles[0].text,
+        )
+    )
+    const esm = [
+        "// ../../Users/someone/secret-project/plugin.ts",
+        'import get from "lodash/get";',
+        'import { merge as m, set } from "lodash";',
+        'import * as R from "ramda";',
+        'import dayjs, { extend } from "dayjs";',
+        'import "dayjs/locale/nl";',
+        "async function execute() { return { output: \"success\", data: { g: typeof get, m: typeof m, s: typeof set, R: typeof R, d: typeof dayjs, e: typeof extend } }; }",
+        "var plugin_default = { execute };",
+        "export {",
+        "  plugin_default as default,",
+        "  execute",
+        "};",
+    ].join("\n")
+    const code = toSandboxModule(esm)
+
+    assert.doesNotMatch(code, /secret-project/, "the author's path went into the published code")
+    assert.doesNotMatch(code, /^\s*(import|export)\b/m)
+    assert.match(code, /const get = require\("lodash\/get"\);/)
+    assert.match(code, /const \{ merge: m, set \} = require\("lodash"\);/)
+    assert.match(code, /const dayjs = require\("dayjs"\);\nconst \{ extend \} = dayjs;/)
+    assert.match(code, /require\("dayjs\/locale\/nl"\);/)
+    assert.match(code, /module\.exports = \{ default: plugin_default, execute \};/)
+
+    // A subpath is not a package name, on the platform or here.
+    const check = validatePluginCode(code)
+    assert.equal(check.valid, false, "lodash/get is not on the list, so this must be refused")
+    assert.match(check.error, /lodash\/get/)
+    const withoutSubpaths = code.replace('"lodash/get"', '"lodash"').replace('require("dayjs/locale/nl");', "")
+    assert.deepEqual(validatePluginCode(withoutSubpaths), { valid: true, packages: ["lodash", "ramda", "dayjs"] })
+
+    assert.equal(
+        toSandboxModule("var plugin_default = { execute() {} };\nexport {\n  plugin_default as default\n};\n").trim(),
+        "var plugin_default = { execute() {} };\nmodule.exports = plugin_default;",
+    )
+})

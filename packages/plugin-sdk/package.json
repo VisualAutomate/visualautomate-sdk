@@ -1,0 +1,50 @@
+{
+  "name": "@visualautomate/plugin-sdk",
+  "version": "0.4.0",
+  "description": "Types and a local runner for building VisualAutomate plugins.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node build.mjs",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "visualautomate",
+    "plugin",
+    "sdk",
+    "automation",
+    "workflow"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "esbuild": "^0.23.0",
+    "typescript": "^5"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VisualAutomate/visualautomate-sdk.git",
+    "directory": "packages/plugin-sdk"
+  },
+  "homepage": "https://developers.visualautomate.com",
+  "publishConfig": {
+    "access": "public"
+  }
+}

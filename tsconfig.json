@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "paths": {
+      "@visualautomate/plugin-sdk": ["./packages/plugin-sdk/src/index.ts"]
+    }
+  },
+  "include": ["packages/plugin-sdk/src/**/*.ts", "packages/cli/src/**/*.ts"]
+}

@@ -1,0 +1,25 @@
+{
+  "name": "visualautomate-sdk",
+  "private": true,
+  "description": "The VisualAutomate plugin SDK and CLI.",
+  "license": "MIT",
+  "workspaces": [
+    "packages/plugin-sdk",
+    "packages/cli"
+  ],
+  "scripts": {
+    "build": "npm run build -w @visualautomate/plugin-sdk && npm run build -w @visualautomate/cli",
+    "typecheck": "npm run build && tsc -p tsconfig.json",
+    "test": "npm run build && node --test test/sdk.test.mjs test/cli.test.mjs test/local-sandbox.test.mjs test/package.test.mjs",
+    "pack:check": "npm run build && npm pack --dry-run --workspaces",
+    "release": "npm run typecheck && npm test && npm publish --workspaces --access public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "esbuild": "^0.23.0",
+    "typescript": "^5"
+  }
+}
