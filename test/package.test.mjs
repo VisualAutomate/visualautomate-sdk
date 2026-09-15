@@ -37,17 +37,21 @@ test("the packed SDK loads with require and with import, and exposes package.jso
     writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "consumer", private: true }))
     npm(["install", `./${tarball}`, "--no-audit", "--no-fund", "--ignore-scripts"], dir)
 
+    // One joined string, not several console.log arguments: a terminal that has
+    // colours on (npm run sets FORCE_COLOR) prints a bare `true` in yellow.
+    const plain = { cwd: dir, encoding: "utf8", env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" } }
+
     const cjs = execFileSync(
         process.execPath,
-        ["-e", 'const s = require("@visualautomate/plugin-sdk"); console.log(typeof s.simulate, s.ALLOWED_PACKAGES.length > 0, require("@visualautomate/plugin-sdk/package.json").name)'],
-        { cwd: dir, encoding: "utf8" },
+        ["-e", 'const s = require("@visualautomate/plugin-sdk"); console.log([typeof s.simulate, s.ALLOWED_PACKAGES.length > 0, require("@visualautomate/plugin-sdk/package.json").name].join(" "))'],
+        plain,
     )
     assert.equal(cjs.trim(), "function true @visualautomate/plugin-sdk")
 
     const esm = execFileSync(
         process.execPath,
-        ["--input-type=module", "-e", 'import { simulate, validatePluginCode } from "@visualautomate/plugin-sdk"; console.log(typeof simulate, validatePluginCode("module.exports={execute(){}}").valid)'],
-        { cwd: dir, encoding: "utf8" },
+        ["--input-type=module", "-e", 'import { simulate, validatePluginCode } from "@visualautomate/plugin-sdk"; console.log([typeof simulate, validatePluginCode("module.exports={execute(){}}").valid].join(" "))'],
+        plain,
     )
     assert.equal(esm.trim(), "function true")
 })
