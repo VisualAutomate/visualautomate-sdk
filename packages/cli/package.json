@@ -5,8 +5,8 @@
   "license": "MIT",
   "type": "module",
   "bin": {
-    "visualautomate": "./dist/index.js",
-    "va": "./dist/index.js"
+    "visualautomate": "dist/index.js",
+    "va": "dist/index.js"
   },
   "files": [
     "dist",
