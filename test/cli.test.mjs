@@ -15,8 +15,23 @@ import { validatePluginCode } from "../packages/plugin-sdk/dist/index.mjs"
 
 const CLI = fileURLToPath(new URL("../packages/cli/dist/index.js", import.meta.url))
 
+/**
+ * The CLI, with colour off.
+ *
+ * Assertions here are about words, not escape codes, and a terminal that has
+ * colour on — npm run sets FORCE_COLOR — would otherwise wrap every one of them.
+ * The colour test sets its own environment.
+ */
+function plainEnv() {
+    // Deleted, not emptied: Node warns when both are set, and that warning ends
+    // up in the output these tests read.
+    const env = { ...process.env, NO_COLOR: "1" }
+    delete env.FORCE_COLOR
+    return env
+}
+
 function va(cwd, ...args) {
-    const run = spawnSync(process.execPath, [CLI, ...args], { cwd, encoding: "utf8" })
+    const run = spawnSync(process.execPath, [CLI, ...args], { cwd, encoding: "utf8", env: plainEnv() })
     return { code: run.status, out: `${run.stdout}${run.stderr}` }
 }
 

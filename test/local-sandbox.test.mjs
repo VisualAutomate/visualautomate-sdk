@@ -21,15 +21,30 @@ async function source(name) {
     return import("data:text/javascript," + encodeURIComponent(out.outputFiles[0].text))
 }
 
+/**
+ * The CLI, with colour off.
+ *
+ * Assertions here are about words, not escape codes, and a terminal that has
+ * colour on — npm run sets FORCE_COLOR — would otherwise wrap every one of them.
+ * The colour test sets its own environment.
+ */
+function plainEnv() {
+    // Deleted, not emptied: Node warns when both are set, and that warning ends
+    // up in the output these tests read.
+    const env = { ...process.env, NO_COLOR: "1" }
+    delete env.FORCE_COLOR
+    return env
+}
+
 function va(cwd, ...args) {
-    const run = spawnSync(process.execPath, [CLI, ...args], { cwd, encoding: "utf8" })
+    const run = spawnSync(process.execPath, [CLI, ...args], { cwd, encoding: "utf8", env: plainEnv() })
     return { code: run.status, out: `${run.stdout}${run.stderr}` }
 }
 
 /** Like va, without blocking this process — for a test that serves requests the CLI makes. */
 function vaAsync(cwd, ...args) {
     return new Promise((resolve) => {
-        const child = spawn(process.execPath, [CLI, ...args], { cwd })
+        const child = spawn(process.execPath, [CLI, ...args], { cwd, env: plainEnv() })
         let out = ""
         child.stdout.on("data", (chunk) => (out += chunk))
         child.stderr.on("data", (chunk) => (out += chunk))
@@ -194,7 +209,9 @@ test("colour follows the terminal, and is carried into the container", async () 
     })
 
     const run = (env) => {
-        const result = spawnSync(process.execPath, [CLI, "test"], { cwd: dir, encoding: "utf8", env: { ...process.env, ...env } })
+        const base = plainEnv()
+        delete base.NO_COLOR
+        const result = spawnSync(process.execPath, [CLI, "test"], { cwd: dir, encoding: "utf8", env: { ...base, ...env } })
         return `${result.stdout}${result.stderr}`
     }
 
