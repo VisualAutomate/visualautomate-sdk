@@ -13,6 +13,8 @@
 
 import { spawnSync } from "node:child_process"
 
+import { colourEnv, red, yellow } from "./colour"
+
 export const IMAGE = "ghcr.io/visualautomate/plugin-sandbox"
 
 /** The platform's sandbox sizes. */
@@ -52,6 +54,9 @@ export function dockerArgs(run: DockerRun): string[] {
         "--tmpfs", "/tmp:rw,size=64m",
         "--cap-drop", "ALL",
         "--security-opt", "no-new-privileges",
+        // So a run inside the container is as readable as one out here: its
+        // stdout is a pipe to Docker, which would otherwise turn colour off.
+        ...colourEnv(),
         ...(run.user ? ["--user", `${run.user.uid}:${run.user.gid}`] : []),
         run.image,
         ...run.args,
@@ -84,11 +89,13 @@ export function dockerProblem(): string | null {
 export function explainExit(code: number, tier: TierName): string | null {
     if (code === 137) {
         const next = (Object.keys(TIERS) as TierName[])[(Object.keys(TIERS) as TierName[]).indexOf(tier) + 1]
-        return `✗ stopped   the step used more than the ${TIERS[tier].memory.replace("g", " GB")} of memory the ${tier} tier has, `
+        return red(
+            `✗ stopped   the step used more than the ${TIERS[tier].memory.replace("g", " GB")} of memory the ${tier} tier has, `
             + `and the container was killed. On the platform it would stop the same way.`
-            + (next ? ` To check it fits a bigger machine: --tier ${next}` : "")
+            + (next ? ` To check it fits a bigger machine: --tier ${next}` : ""),
+        )
     }
-    if (code === 125) return "✗ Docker could not start the container. Is the image available? Try: docker pull " + IMAGE
+    if (code === 125) return red("✗ Docker could not start the container. Is the image available? Try: docker pull " + IMAGE)
     return null
 }
 
@@ -106,7 +113,7 @@ export function ensureDocker(say: (text: string) => void, waitMs = 120_000): str
     if (!problem) return null
     if (problem.includes("not installed")) return problem
 
-    say("Docker is not running. Starting Docker Desktop…")
+    say(yellow("Docker is not running. Starting Docker Desktop…"))
     const started = spawnSync("docker", ["desktop", "start"], { encoding: "utf8" })
     if (started.status !== 0) {
         say("Could not start it from here — start Docker Desktop yourself; this will carry on when it is up.")

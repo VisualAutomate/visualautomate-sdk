@@ -36,6 +36,7 @@ import { toSandboxModule } from "./sandbox-module"
 import { guardFetch, policyFor } from "./egress"
 import { loadPersisted, persistEnabled, savePersisted } from "./persist"
 import { IMAGE, ensureDocker, forwardedFlags, pullImage, runInDocker, tierOf, type DockerRun } from "./docker"
+import { bold, dim, green, red, yellow } from "./colour"
 
 /** Set by build.mjs from package.json. */
 declare const __CLI_VERSION__: string
@@ -98,7 +99,7 @@ async function tokenFor(flags: Flags): Promise<{ token: string; apiUrl: string }
 type Flags = Record<string, string>
 
 function fail(message: string): never {
-    console.error(message)
+    console.error(red(message))
     // Not process.exit: the bundler has to be stopped first. Throwing lands in
     // main()'s catch, which does that and then exits 1 — and the message is
     // already printed, so the catch has nothing left to say.
@@ -211,7 +212,7 @@ async function cmdLogin(flags: Flags): Promise<void> {
     // Prove it works before storing it, so "signed in" means signed in.
     const who = await whoami(apiUrl, token)
     await writeConfig({ token, apiUrl, email: who.email })
-    ok(`\n✓ Signed in as ${who.email}`)
+    ok(green(`\n✓ Signed in as ${who.email}`))
     ok(`  Token stored in ${configPath()}`)
 }
 
@@ -313,7 +314,7 @@ async function cmdInit(args: string[], flags: Flags): Promise<void> {
             "`test.json` is the input, config and state `test` runs with.\n",
     )
 
-    ok(`\n✓ Created ${name} from the "${templateName}" template\n`)
+    ok(green(`\n✓ Created ${name} from the "${templateName}" template\n`))
     ok("  cd " + name)
     ok("  visualautomate test")
     ok("  visualautomate push\n")
@@ -383,14 +384,14 @@ function line(indent: boolean, text: string): void {
  */
 async function runTarget(target: Target, flags: Flags, several: boolean): Promise<boolean> {
     const say = (text: string) => line(several, text)
-    if (several) ok(`\n▸ ${target.name}`)
+    if (several) ok(`\n${bold(`▸ ${target.name}`)}`)
 
     try {
         const code = await codeFor(target)
 
         const check = validatePluginCode(code)
         if (!check.valid) {
-            say(`✗ refused   ${check.error}`)
+            say(`${red("✗ refused")}   ${check.error}`)
             return false
         }
 
@@ -414,7 +415,7 @@ async function runTarget(target: Target, flags: Flags, several: boolean): Promis
                 const manifest = parseJsonc(await readFile(manifestPath, "utf8")).value as { outputs?: string[] }
                 outputs = manifest.outputs ?? []
             } catch (error) {
-                say(`✗ manifest.json is not valid JSON: ${error instanceof Error ? error.message : String(error)}`)
+                say(red(`✗ manifest.json is not valid JSON: ${error instanceof Error ? error.message : String(error)}`))
                 return false
             }
         }
@@ -445,29 +446,31 @@ async function runTarget(target: Target, flags: Flags, several: boolean): Promis
         const expected = settings.expectOutput
         const passed = result.status === "success" && (!expected || port === expected)
 
-        say(`${passed ? "✓ passed" : "✗ failed"}  ${result.status}, ${result.durationMs}ms`)
-        if (result.error) say(`error    ${result.error}`)
+        const verdict = passed ? green(bold("✓ passed")) : red(bold("✗ failed"))
+        say(`${verdict}  ${dim(`${result.status}, ${result.durationMs}ms`)}`)
+        if (result.error) say(`${dim("error")}    ${red(result.error)}`)
         if (result.output) {
-            say(`output   ${port}${expected ? ` (expected ${expected})` : ""}`)
-            say(`data     ${JSON.stringify(result.output.data, null, 2).replace(/\n/g, "\n         ")}`)
+            const port_ = passed || !expected ? port : red(String(port))
+            say(`${dim("output")}   ${port_}${expected ? dim(` (expected ${expected})`) : ""}`)
+            say(`${dim("data")}     ${JSON.stringify(result.output.data, null, 2).replace(/\n/g, "\n         ")}`)
         }
-        if (result.files.size > 0) say(`files    ${[...result.files.keys()].join(", ")}`)
-        if (result.state.size > 0) say(`state    ${JSON.stringify(Object.fromEntries(result.state))}`)
-        for (const entry of result.logs ?? []) say(`log      ${entry}`)
+        if (result.files.size > 0) say(`${dim("files")}    ${[...result.files.keys()].join(", ")}`)
+        if (result.state.size > 0) say(`${dim("state")}    ${JSON.stringify(Object.fromEntries(result.state))}`)
+        for (const entry of result.logs ?? []) say(`${dim("log")}      ${entry}`)
 
         for (const [host, enforced] of denied) {
             say(
                 enforced
-                    ? `egress   blocked ${host} — not in allowedDomains`
-                    : `! egress ${host} is not allowed on the platform unless the plugin declares it. `
+                    ? `${dim("egress")}   ${red(`blocked ${host}`)} — not in allowedDomains`
+                    : yellow(`! egress ${host} is not allowed on the platform unless the plugin declares it. `)
                         + `Add "allowedDomains": ["${host}"] to the test file to check with the same rule.`,
             )
         }
 
         if (persist) {
             const refused = await savePersisted(target.dir, result.files, result.state)
-            say(`kept     storage and state in ${relative(process.cwd(), join(target.dir, ".visualautomate")) || ".visualautomate"}`)
-            for (const path of refused) say(`! storage path "${path}" points outside the storage folder and was not written`)
+            say(`${dim("kept")}     ${dim(`storage and state in ${relative(process.cwd(), join(target.dir, ".visualautomate")) || ".visualautomate"}`)}`)
+            for (const path of refused) say(yellow(`! storage path "${path}" points outside the storage folder and was not written`))
         }
 
         // A port the manifest does not declare is a step whose line goes nowhere on
@@ -475,13 +478,15 @@ async function runTarget(target: Target, flags: Flags, several: boolean): Promis
         // saying here, where it is one line to fix.
         if (port && outputs.length > 0 && !outputs.includes(port)) {
             say(
-                `! This returned output "${port}", which manifest.json does not list `
-                + `(it has ${outputs.map((o) => `"${o}"`).join(", ")}). On a canvas nothing would follow it.`,
+                yellow(
+                    `! This returned output "${port}", which manifest.json does not list `
+                    + `(it has ${outputs.map((o) => `"${o}"`).join(", ")}). On a canvas nothing would follow it.`,
+                ),
             )
         }
         return passed
     } catch (error) {
-        say(`✗ ${error instanceof Error ? error.message : String(error)}`)
+        say(red(`✗ ${error instanceof Error ? error.message : String(error)}`))
         return false
     }
 }
@@ -492,7 +497,10 @@ async function runTargets(targets: Target[], flags: Flags): Promise<boolean> {
     for (const target of targets) {
         if (await runTarget(target, flags, targets.length > 1)) passed++
     }
-    if (targets.length > 1) ok(`\n${passed} of ${targets.length} passed`)
+    if (targets.length > 1) {
+        const tally = `${passed} of ${targets.length} passed`
+        ok(`\n${passed === targets.length ? green(bold(tally)) : red(bold(tally))}`)
+    }
     return passed === targets.length
 }
 
@@ -588,7 +596,7 @@ function sayWhatRuns(targets: Target[], picked: boolean): void {
         return
     }
     ok(`Running ${targets.length} modules: ${targets.map((t) => t.name.replace(/^modules\//, "")).join(", ")}`)
-    if (!picked) ok(`One of them: vsa dev ${targets[0].name.replace(/^modules\//, "")}`)
+    if (!picked) ok(dim(`One of them: vsa dev ${targets[0].name.replace(/^modules\//, "")}`))
 }
 
 async function cmdTest(args: string[], flags: Flags): Promise<void> {
@@ -626,14 +634,14 @@ async function cmdDev(args: string[], flags: Flags): Promise<void> {
     const header = () => {
         // Clear the screen the way a terminal understands, so each run reads alone.
         process.stdout.write("\x1Bc")
-        ok(`vsa dev — ${new Date().toLocaleTimeString()} — Ctrl+C to stop`)
+        ok(`${bold("vsa dev")} ${dim(`— ${new Date().toLocaleTimeString()} — Ctrl+C to stop`)}`)
     }
 
     const run = async (chosen: Target[]) =>
         inSandbox ? runTargetsInDocker(chosen, targets, flags) : runTargets(chosen, flags)
 
     header()
-    ok(inSandbox ? `in ${imageFor(flags)}, tier ${flags.tier || "standard"}` : "on this machine, not in the sandbox")
+    ok(dim(inSandbox ? `in ${imageFor(flags)}, tier ${flags.tier || "standard"}` : "on this machine, not in the sandbox"))
     sayWhatRuns(targets, Boolean(picked))
     await run(targets)
 
@@ -656,14 +664,14 @@ async function cmdDev(args: string[], flags: Flags): Promise<void> {
             targets = findTargets(root, picked)
         } catch (error) {
             header()
-            ok(`✗ ${error instanceof Error ? error.message : String(error)}`)
+            ok(red(`✗ ${error instanceof Error ? error.message : String(error)}`))
             running = false
             return
         }
         const hit = changed.map((path) => targetForPath(targets, path))
         const chosen = hit.some((t) => t === null) ? targets : [...new Set(hit as Target[])]
         header()
-        ok(`changed: ${changed.map((p) => relative(root, p)).join(", ")}`)
+        ok(dim(`changed: ${changed.map((p) => relative(root, p)).join(", ")}`))
         await run(chosen)
         running = false
     }
@@ -811,7 +819,7 @@ async function cmdPush(flags: Flags): Promise<void> {
         fail(`Push refused: ${data.error ?? `status ${res.status}`}`)
     }
 
-    ok(`\n✓ Published (id: ${data.pluginId})`)
+    ok(green(`\n✓ Published (id: ${data.pluginId})`))
     ok(`  A version snapshot was saved, so you can roll back from the dashboard.`)
 }
 

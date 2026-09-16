@@ -183,3 +183,30 @@ test("vsa is the command, with va and visualautomate as the same binary", () => 
     assert.match(help, /vsa dev \[<module>\]\s+the sandbox/)
     assert.match(help, /--local\s+`dev` without the sandbox/)
 })
+
+// ─── colour ─────────────────────────────────────────────────────────────────
+
+test("colour follows the terminal, and is carried into the container", async () => {
+    const dir = scratch()
+    write(dir, {
+        "manifest.json": { name: "p", outputs: ["success"] },
+        "index.js": `module.exports = { execute: async () => ({ output: "success" }) }\n`,
+    })
+
+    const run = (env) => {
+        const result = spawnSync(process.execPath, [CLI, "test"], { cwd: dir, encoding: "utf8", env: { ...process.env, ...env } })
+        return `${result.stdout}${result.stderr}`
+    }
+
+    assert.match(run({ FORCE_COLOR: "1", NO_COLOR: "" }), /\x1b\[32m/, "green for a run that passed")
+    assert.doesNotMatch(run({ NO_COLOR: "1", FORCE_COLOR: "" }), /\x1b\[/, "NO_COLOR means no escape codes at all")
+    // Not a terminal and nothing asked for: a log file or a CI run stays plain.
+    assert.doesNotMatch(run({ FORCE_COLOR: "", NO_COLOR: "" }), /\x1b\[/)
+
+    // The container's stdout is a pipe to Docker, so what this terminal wants is
+    // passed in rather than worked out again in there.
+    const { dockerArgs } = await source("docker")
+    const args = dockerArgs({ cwd: "/p", image: "img", tier: "standard", args: ["test"] })
+    const env = args[args.indexOf("--env") + 1]
+    assert.match(env, /^(FORCE_COLOR=1|NO_COLOR=1)$/, `passed ${env}`)
+})

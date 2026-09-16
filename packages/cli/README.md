@@ -59,6 +59,10 @@ state    {"runs":1}
 A run passes when it succeeds and, if the test file names an `expectOutput`,
 leaves by that port — the same verdict as the GitHub check.
 
+The verdict is green when it passed and red when it did not, in the sandbox as
+well as out here. `NO_COLOR` turns that off, and output that is not a terminal —
+a pipe, a file, a CI log — is plain anyway; `FORCE_COLOR` turns it back on.
+
 ### In a GitHub repository
 
 `test` works wherever the platform tests your code on a push:
