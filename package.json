@@ -10,7 +10,7 @@
   "scripts": {
     "build": "npm run build -w @visualautomate/plugin-sdk && npm run build -w @visualautomate/cli",
     "typecheck": "npm run build && tsc -p tsconfig.json",
-    "test": "npm run build && node --test test/sdk.test.mjs test/cli.test.mjs test/local-sandbox.test.mjs test/package.test.mjs",
+    "test": "npm run build && node --test test/sdk.test.mjs test/cli.test.mjs test/local-sandbox.test.mjs test/editor-types.test.mjs test/package.test.mjs",
     "pack:check": "npm run build && npm pack --dry-run --workspaces",
     "release": "npm run typecheck && npm test && npm publish --workspaces --access public"
   },

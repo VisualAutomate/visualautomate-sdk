@@ -33,6 +33,28 @@ tsconfig.json        so your editor type-checks it
 Templates: `blank`, `http-request`, `connection`, `file`. Pass one with
 `--template`. Each runs unmodified.
 
+## Types in your editor
+
+Your plugin's code imports nothing — the platform refuses the word `import`
+anywhere in the file, comments included, and the SDK is not a package a step may
+require. So the types are written into your project instead, and one line names
+them:
+
+```js
+/** @type {PluginModule} */
+module.exports = {
+  execute: async (input, config, context) => {
+    //                              ^ completes, with the documentation
+  },
+}
+```
+
+`dev` and `test` write `visualautomate.d.ts` and a `jsconfig.json` beside your
+code and keep them current; `vsa types` does it on its own. In an app's
+repository they go at the root, where they cover every module. Nothing is
+installed, nothing of it exists while your plugin runs, and a file you wrote
+yourself is never written over — delete ours and it comes back.
+
 ## `test`
 
 Runs your plugin the way the platform would, in three steps:

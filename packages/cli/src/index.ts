@@ -29,6 +29,7 @@ import { createRequire } from "node:module"
 import { build, stop as stopBundler } from "esbuild"
 import { loadPluginCode, sandboxRequire, simulate, validatePluginCode } from "@visualautomate/plugin-sdk"
 import { TYPE_DECLARATIONS } from "./declarations"
+import { ensureRepoTypes, JSCONFIG_FILE, projectRoot, TYPES_FILE } from "./repo-types"
 import { TEMPLATES, type TemplateName } from "./templates"
 import { parseJsonc } from "./jsonc"
 import { findTargets, readTestFile, targetForPath, type Target } from "./project"
@@ -599,8 +600,39 @@ function sayWhatRuns(targets: Target[], picked: boolean): void {
     if (!picked) ok(dim(`One of them: vsa dev ${targets[0].name.replace(/^modules\//, "")}`))
 }
 
+/**
+ * Keep the project's types in step, quietly, before anything runs.
+ *
+ * Here rather than at a command somebody has to know about: the types are how
+ * an editor knows what `context` is, and a repository cloned from GitHub has
+ * whatever the portal wrote the day it was made — or, if it was made before any
+ * of this, nothing at all. Writing them costs nothing and says nothing when
+ * there is nothing to do.
+ */
+function keepTypes(): string[] {
+    try {
+        return ensureRepoTypes(projectRoot(process.cwd()), VERSION)
+    } catch {
+        // Never a reason not to run: a read-only checkout still tests fine.
+        return []
+    }
+}
+
+async function cmdTypes(): Promise<void> {
+    const root = projectRoot(process.cwd())
+    const written = ensureRepoTypes(root, VERSION)
+    if (written.length === 0) {
+        ok(`${TYPES_FILE} and ${JSCONFIG_FILE} are already what this CLI writes.`)
+        return
+    }
+    ok(green(`\u2713 Wrote ${written.join(" and ")}`))
+    ok(dim("Your editor now completes input, config and context. Name the type above module.exports:"))
+    ok(dim("  /** @type {PluginModule} */"))
+}
+
 async function cmdTest(args: string[], flags: Flags): Promise<void> {
     const targets = targetsOrFail(args, flags)
+    keepTypes()
     if (flags.docker) prepareSandbox(flags)
     const passed = flags.docker ? runTargetsInDocker(targets, targets, flags) : await runTargets(targets, flags)
     if (!passed) process.exitCode = 1
@@ -628,6 +660,7 @@ async function cmdDev(args: string[], flags: Flags): Promise<void> {
     const root = process.cwd()
     const picked = args[0] ?? flags.module
     let targets = targetsOrFail(args, flags)
+    const typesWritten = keepTypes()
     const inSandbox = flags.local !== "true"
     if (inSandbox) prepareSandbox(flags)
 
@@ -643,6 +676,7 @@ async function cmdDev(args: string[], flags: Flags): Promise<void> {
     header()
     ok(dim(inSandbox ? `in ${imageFor(flags)}, tier ${flags.tier || "standard"}` : "on this machine, not in the sandbox"))
     sayWhatRuns(targets, Boolean(picked))
+    if (typesWritten.length > 0) ok(dim(`Wrote ${typesWritten.join(" and ")} — your editor now knows what context is`))
     await run(targets)
 
     // .visualautomate is where --persist writes, and a run must not trigger the next one.
@@ -833,6 +867,7 @@ vsa — build and publish VisualAutomate plugins
   vsa init <name> [--template] start a plugin
   vsa dev [<module>]           the sandbox, and a run again on every save
   vsa test [<module>]          run it once, as the platform's check does
+  vsa types                    write the types your editor reads
   vsa push                     publish it
   vsa whoami                   which account this is
   vsa logout                   forget the token
@@ -898,6 +933,8 @@ async function main(): Promise<void> {
             return cmdInit(args, flags)
         case "test":
             return cmdTest(args, flags)
+        case "types":
+            return cmdTypes()
         case "dev":
         case "watch":
             return cmdDev(args, flags)
