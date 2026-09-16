@@ -173,3 +173,13 @@ test("--version prints the version the package was built with", () => {
     const { version } = JSON.parse(readFileSync(new URL("../packages/cli/package.json", import.meta.url), "utf8"))
     assert.equal(va(tmpdir(), "--version").out.trim(), version)
 })
+
+test("vsa is the command, with va and visualautomate as the same binary", () => {
+    const pkg = JSON.parse(readFileSync(new URL("../packages/cli/package.json", import.meta.url), "utf8"))
+    assert.deepEqual(Object.keys(pkg.bin).sort(), ["va", "visualautomate", "vsa"])
+    assert.equal(new Set(Object.values(pkg.bin)).size, 1, "all three run the same file")
+
+    const help = va(tmpdir()).out
+    assert.match(help, /vsa dev \[--module <name>\]\s+the sandbox/)
+    assert.match(help, /--local\s+`dev` without the sandbox/)
+})

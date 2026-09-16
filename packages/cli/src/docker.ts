@@ -92,6 +92,53 @@ export function explainExit(code: number, tier: TierName): string | null {
     return null
 }
 
+/**
+ * Get Docker ready, rather than telling somebody it is not.
+ *
+ * Docker Desktop is installed on nearly every machine this runs on and is
+ * usually just not started yet, so it is started here and waited for. Docker
+ * that is not installed at all is the one thing this cannot fix.
+ *
+ * Returns what to say when it could not be made ready, or null when it is.
+ */
+export function ensureDocker(say: (text: string) => void, waitMs = 120_000): string | null {
+    const problem = dockerProblem()
+    if (!problem) return null
+    if (problem.includes("not installed")) return problem
+
+    say("Docker is not running. Starting Docker Desktop…")
+    const started = spawnSync("docker", ["desktop", "start"], { encoding: "utf8" })
+    if (started.status !== 0) {
+        say("Could not start it from here — start Docker Desktop yourself; this will carry on when it is up.")
+    }
+
+    const until = Date.now() + waitMs
+    while (Date.now() < until) {
+        // A second of sleep, without a dependency: the engine takes tens of
+        // seconds to come up and there is nothing else to do meanwhile.
+        spawnSync(process.execPath, ["-e", "setTimeout(() => {}, 1000)"])
+        if (!dockerProblem()) {
+            say("Docker is ready.")
+            return null
+        }
+    }
+    return "Docker did not come up in time. Start Docker Desktop and try again."
+}
+
+/** Whether this machine already has the image. */
+export function hasImage(image: string): boolean {
+    return spawnSync("docker", ["image", "inspect", image], { stdio: "ignore" }).status === 0
+}
+
+/** Fetch the image, showing the download. Returns what to say on failure. */
+export function pullImage(image: string, say: (text: string) => void): string | null {
+    if (hasImage(image)) return null
+    say(`Fetching ${image} — once, about 700 MB.`)
+    const pulled = spawnSync("docker", ["pull", image], { stdio: "inherit" })
+    if (pulled.status === 0) return null
+    return `Could not fetch ${image}. Check your connection, or pass --image with one you have.`
+}
+
 /** Run once in the container. Returns the exit code. */
 export function runInDocker(run: DockerRun): number {
     const result = spawnSync("docker", dockerArgs(run), { stdio: "inherit" })

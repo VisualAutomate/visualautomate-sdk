@@ -5,15 +5,15 @@ The tools for building VisualAutomate plugins, published to npm.
 | Package | What it is |
 |---|---|
 | [`@visualautomate/plugin-sdk`](packages/plugin-sdk) | The types a plugin is written against, a local simulator, and the checks the platform applies to plugin code |
-| [`@visualautomate/cli`](packages/cli) | `visualautomate` / `va`: `init`, `test`, `dev`, `push`, `login` |
+| [`@visualautomate/cli`](packages/cli) | `vsa` (also `va`, `visualautomate`): `init`, `dev`, `test`, `push`, `login` |
 
 Most plugin authors install only the CLI:
 
 ```bash
 npm install -g @visualautomate/cli
-va init my-step
+vsa init my-step
 cd my-step
-va dev
+vsa dev
 ```
 
 Use the SDK directly for the types in your editor, or for `simulate` in your own test

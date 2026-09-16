@@ -4,7 +4,7 @@
  *   login    sign this machine in, through the browser
  *   init     start a plugin from a template
  *   test     run it here, with a context that behaves
- *   dev      run it again every time a file changes
+ *   dev      the sandbox, and a run again on every save
  *   push     publish it to your account
  *   whoami   which account this machine is signed in as
  *   logout   forget the token
@@ -35,7 +35,7 @@ import { findTargets, readTestFile, targetForPath, type Target } from "./project
 import { toSandboxModule } from "./sandbox-module"
 import { guardFetch, policyFor } from "./egress"
 import { loadPersisted, persistEnabled, savePersisted } from "./persist"
-import { IMAGE, dockerProblem, forwardedFlags, runInDocker, tierOf, type DockerRun } from "./docker"
+import { IMAGE, ensureDocker, forwardedFlags, pullImage, runInDocker, tierOf, type DockerRun } from "./docker"
 
 /** Set by build.mjs from package.json. */
 declare const __CLI_VERSION__: string
@@ -514,10 +514,27 @@ function packageLoader(dir: string): (name: string) => unknown {
     }
 }
 
-/** How to run in the sandbox image, from `--docker`, `--image` and `--tier`. */
+/** The image this CLI asks for: its own version, or the one named with --image. */
+function imageFor(flags: Flags): string {
+    return flags.image || `${IMAGE}:${VERSION}`
+}
+
+/**
+ * Docker running and the image on the machine, or a sentence saying why not.
+ *
+ * Done once before a command starts rather than per run, so `dev` does not
+ * check on every save and the download is not half a screen of output in the
+ * middle of a test.
+ */
+function prepareSandbox(flags: Flags): void {
+    const docker = ensureDocker(ok)
+    if (docker) fail(docker)
+    const image = pullImage(imageFor(flags), ok)
+    if (image) fail(image)
+}
+
+/** How to run in the sandbox image, from `--image` and `--tier`. */
 function dockerRunFor(flags: Flags, args: string[]): DockerRun {
-    const problem = dockerProblem()
-    if (problem) fail(problem)
     let tier
     try {
         tier = tierOf(flags.tier)
@@ -526,7 +543,7 @@ function dockerRunFor(flags: Flags, args: string[]): DockerRun {
     }
     return {
         cwd: process.cwd(),
-        image: flags.image || `${IMAGE}:${VERSION}`,
+        image: imageFor(flags),
         tier,
         args,
         user: typeof process.getuid === "function" && typeof process.getgid === "function"
@@ -560,6 +577,7 @@ function targetsOrFail(flags: Flags): Target[] {
 
 async function cmdTest(flags: Flags): Promise<void> {
     const targets = targetsOrFail(flags)
+    if (flags.docker) prepareSandbox(flags)
     const passed = flags.docker ? runTargetsInDocker(targets, targets, flags) : await runTargets(targets, flags)
     if (!passed) process.exitCode = 1
 }
@@ -567,28 +585,38 @@ async function cmdTest(flags: Flags): Promise<void> {
 // ─── dev ─────────────────────────────────────────────────────────────────────
 
 /**
- * Run the tests, then run them again whenever something is saved.
+ * The sandbox, and a run again on every save.
+ *
+ * In the plugin sandbox image unless `--local` says otherwise: it is the thing
+ * a push will be tested in, it has every allowed package installed, and it
+ * holds a step to the CPU and memory of a tier. Docker is started and the image
+ * fetched here, so `vsa dev` is the whole setup.
  *
  * Only the module whose folder changed is run again; a change outside every
  * module folder (a shared file, the test data at the root) runs all of them.
  * Saves are gathered for a moment first, because an editor writes a file in
  * several steps and a formatter writes it again straight after.
+ *
+ * The watcher stays on this machine: a bind mount does not deliver file events
+ * into a container on Windows or macOS.
  */
 async function cmdDev(flags: Flags): Promise<void> {
     const root = process.cwd()
     let targets = targetsOrFail(flags)
+    const inSandbox = flags.local !== "true"
+    if (inSandbox) prepareSandbox(flags)
 
     const header = () => {
         // Clear the screen the way a terminal understands, so each run reads alone.
         process.stdout.write("\x1Bc")
-        ok(`visualautomate dev — ${new Date().toLocaleTimeString()} — Ctrl+C to stop`)
+        ok(`vsa dev — ${new Date().toLocaleTimeString()} — Ctrl+C to stop`)
     }
 
     const run = async (chosen: Target[]) =>
-        flags.docker ? runTargetsInDocker(chosen, targets, flags) : runTargets(chosen, flags)
+        inSandbox ? runTargetsInDocker(chosen, targets, flags) : runTargets(chosen, flags)
 
     header()
-    if (flags.docker) ok(`in ${flags.image || `${IMAGE}:${VERSION}`}, tier ${flags.tier || "standard"}`)
+    ok(inSandbox ? `in ${imageFor(flags)}, tier ${flags.tier || "standard"}` : "on this machine, not in the sandbox")
     await run(targets)
 
     // .visualautomate is where --persist writes, and a run must not trigger the next one.
@@ -773,16 +801,18 @@ async function cmdPush(flags: Flags): Promise<void> {
 
 function printHelp(): void {
     console.log(`
-visualautomate — build and publish plugins
+vsa — build and publish VisualAutomate plugins
 
-  visualautomate login                    sign this machine in
-  visualautomate init <name> [--template] start a plugin
-  visualautomate test [--module <name>]   run it here, as the platform's check does
-  visualautomate dev [--module <name>]    run it again on every save
-  visualautomate --version                this CLI's version
-  visualautomate push                     publish it
-  visualautomate whoami                   which account this is
-  visualautomate logout                   forget the token
+  vsa login                    sign this machine in
+  vsa init <name> [--template] start a plugin
+  vsa dev [--module <name>]    the sandbox, and a run again on every save
+  vsa test [--module <name>]   run it once, as the platform's check does
+  vsa push                     publish it
+  vsa whoami                   which account this is
+  vsa logout                   forget the token
+  vsa --version                this CLI's version
+
+\`va\` and \`visualautomate\` are the same command.
 
 Templates: ${Object.keys(TEMPLATES).join(", ")}
 
@@ -791,11 +821,13 @@ GitHub repository, and at the root of an app's repository, where every folder
 in modules/ is run (or the one named with --module). The run's settings come
 from visualautomate.test.json, test.json, or --input <file>.
 
-Options for \`test\` and \`dev\`:
-  --docker             run inside the plugin sandbox image (Docker must be running)
-  --tier <name>        with --docker: standard, boosted, high or max
-  --image <ref>        with --docker: a different image
+Options for \`dev\` and \`test\`:
+  --module <name>      one folder of modules/ instead of all of them
+  --tier <name>        the sandbox's size: standard, boosted, high or max
+  --image <ref>        a different sandbox image
   --persist            keep storage and state in .visualautomate/ between runs
+  --local              \`dev\` without the sandbox, on this machine's Node
+  --docker             \`test\` inside the sandbox, as \`dev\` does
 
 Environment (for CI, where there is no browser):
   VISUALAUTOMATE_API_TOKEN   use instead of \`login\`

@@ -4,14 +4,14 @@ Build and publish VisualAutomate plugins.
 
 ```bash
 npm install -g @visualautomate/cli
-visualautomate login
-visualautomate init my-step
+vsa login
+vsa init my-step
 cd my-step
-visualautomate dev      # run it on every save
-visualautomate push
+vsa dev                 # the sandbox, and a run again on every save
+vsa push
 ```
 
-`va` is the same command, shorter.
+`va` and `visualautomate` are the same command.
 
 That is the whole toolchain. There is nothing else to install: the CLI carries
 the SDK inside it, compiles your TypeScript itself, and writes the type
@@ -85,13 +85,17 @@ unbundled, because that is the file the sandbox loads.
 
 ## `dev`
 
-`test`, and again on every save. Only the module whose folder changed runs
-again; a change anywhere else runs them all. Ctrl+C stops it.
-
 ```bash
-va dev
-va dev --module send-message
+vsa dev
+vsa dev --module send-message
+vsa dev --tier boosted
+vsa dev --local            # on this machine's Node, without the sandbox
 ```
+
+Everything in one command: it starts Docker if it is not running, fetches the
+sandbox image the first time, runs every module, and runs them again on every
+save. Only the module whose folder changed runs again; a change anywhere else
+runs them all. Ctrl+C stops it.
 
 `context.connections` and `context.media` are **not** simulated. One is
 somebody's OAuth account and the other is an ffmpeg container; pretending to be
@@ -140,14 +144,17 @@ Keeps storage and state between runs, in `.visualautomate/` next to the plugin:
 Once that folder exists it is used without the flag. Delete it to start over,
 and add it to `.gitignore`.
 
-## `--docker`: the sandbox on your machine
+## The sandbox on your machine
+
+`dev` uses it by default; `test` does with `--docker`:
 
 ```bash
-va test --docker
-va dev --docker --tier boosted
+vsa dev
+vsa test --docker
+vsa dev --tier boosted
 ```
 
-Runs the test inside the plugin sandbox image,
+Your plugin runs inside the plugin sandbox image,
 `ghcr.io/visualautomate/plugin-sandbox`, at the version of this CLI:
 
 - the Node version the platform runs plugins on, with every allowed npm
@@ -157,10 +164,12 @@ Runs the test inside the plugin sandbox image,
 - no Linux capabilities, a read-only filesystem apart from your project and a
   small `/tmp`, and nothing else from your machine.
 
-A step that runs out of memory or time here does the same on the platform. Docker
-must be running. `--image` uses a different image, for example one you built
-yourself. With `dev`, the watcher stays on your machine and each run starts a
-fresh container.
+A step that runs out of memory or time here does the same on the platform.
+
+Docker does not have to be running: `dev` starts Docker Desktop and waits for it,
+then fetches the image if this machine does not have it. `--image` uses a
+different image, for example one you built yourself. The watcher stays on your
+machine, and each run starts a fresh container.
 
 `context.media` is not available locally, in or out of Docker.
 
