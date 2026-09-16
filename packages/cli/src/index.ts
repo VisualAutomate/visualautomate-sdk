@@ -567,16 +567,32 @@ function runTargetsInDocker(targets: Target[], all: Target[], flags: Flags): boo
     return passed
 }
 
-function targetsOrFail(flags: Flags): Target[] {
+/**
+ * What to run: everything here, or the module named as the first argument.
+ *
+ * `vsa dev send` is the same as `vsa dev --module send`, and both take the
+ * shortest name that picks one folder out of modules/.
+ */
+function targetsOrFail(args: string[], flags: Flags): Target[] {
     try {
-        return findTargets(process.cwd(), flags.module)
+        return findTargets(process.cwd(), args[0] ?? flags.module)
     } catch (error) {
         fail(error instanceof Error ? error.message : String(error))
     }
 }
 
-async function cmdTest(flags: Flags): Promise<void> {
-    const targets = targetsOrFail(flags)
+/** Which modules these are, and how to run one of them on its own. */
+function sayWhatRuns(targets: Target[], picked: boolean): void {
+    if (targets.length === 1) {
+        ok(`Running ${targets[0].name}`)
+        return
+    }
+    ok(`Running ${targets.length} modules: ${targets.map((t) => t.name.replace(/^modules\//, "")).join(", ")}`)
+    if (!picked) ok(`One of them: vsa dev ${targets[0].name.replace(/^modules\//, "")}`)
+}
+
+async function cmdTest(args: string[], flags: Flags): Promise<void> {
+    const targets = targetsOrFail(args, flags)
     if (flags.docker) prepareSandbox(flags)
     const passed = flags.docker ? runTargetsInDocker(targets, targets, flags) : await runTargets(targets, flags)
     if (!passed) process.exitCode = 1
@@ -600,9 +616,10 @@ async function cmdTest(flags: Flags): Promise<void> {
  * The watcher stays on this machine: a bind mount does not deliver file events
  * into a container on Windows or macOS.
  */
-async function cmdDev(flags: Flags): Promise<void> {
+async function cmdDev(args: string[], flags: Flags): Promise<void> {
     const root = process.cwd()
-    let targets = targetsOrFail(flags)
+    const picked = args[0] ?? flags.module
+    let targets = targetsOrFail(args, flags)
     const inSandbox = flags.local !== "true"
     if (inSandbox) prepareSandbox(flags)
 
@@ -617,6 +634,7 @@ async function cmdDev(flags: Flags): Promise<void> {
 
     header()
     ok(inSandbox ? `in ${imageFor(flags)}, tier ${flags.tier || "standard"}` : "on this machine, not in the sandbox")
+    sayWhatRuns(targets, Boolean(picked))
     await run(targets)
 
     // .visualautomate is where --persist writes, and a run must not trigger the next one.
@@ -635,7 +653,7 @@ async function cmdDev(flags: Flags): Promise<void> {
         pending.clear()
         try {
             // A module folder may have been added or removed since the last run.
-            targets = findTargets(root, flags.module)
+            targets = findTargets(root, picked)
         } catch (error) {
             header()
             ok(`✗ ${error instanceof Error ? error.message : String(error)}`)
@@ -805,8 +823,8 @@ vsa — build and publish VisualAutomate plugins
 
   vsa login                    sign this machine in
   vsa init <name> [--template] start a plugin
-  vsa dev [--module <name>]    the sandbox, and a run again on every save
-  vsa test [--module <name>]   run it once, as the platform's check does
+  vsa dev [<module>]           the sandbox, and a run again on every save
+  vsa test [<module>]          run it once, as the platform's check does
   vsa push                     publish it
   vsa whoami                   which account this is
   vsa logout                   forget the token
@@ -818,11 +836,11 @@ Templates: ${Object.keys(TEMPLATES).join(", ")}
 
 \`test\` and \`dev\` work in a plugin made with \`init\`, at the root of a plugin's
 GitHub repository, and at the root of an app's repository, where every folder
-in modules/ is run (or the one named with --module). The run's settings come
+in modules/ is run (or the one you name: vsa dev send-message). The run's settings come
 from visualautomate.test.json, test.json, or --input <file>.
 
 Options for \`dev\` and \`test\`:
-  --module <name>      one folder of modules/ instead of all of them
+  --module <name>      the same as naming it: vsa dev send-message
   --tier <name>        the sandbox's size: standard, boosted, high or max
   --image <ref>        a different sandbox image
   --persist            keep storage and state in .visualautomate/ between runs
@@ -871,17 +889,17 @@ async function main(): Promise<void> {
         case "new":
             return cmdInit(args, flags)
         case "test":
-            return cmdTest(flags)
+            return cmdTest(args, flags)
         case "dev":
         case "watch":
-            return cmdDev(flags)
+            return cmdDev(args, flags)
         case "push":
         case "publish":
             return cmdPush(flags)
         // `plugin test` and `plugin push` are accepted as aliases.
         case "plugin": {
             const sub = args.shift()
-            if (sub === "test") return cmdTest(flags)
+            if (sub === "test") return cmdTest(args, flags)
             if (sub === "push") return cmdPush(flags)
             printHelp()
             return

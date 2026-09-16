@@ -79,16 +79,17 @@ my-app/                       an app's repository
       …
 ```
 
-At the root of an app's repository every module runs, one after another;
-`--module send-message` runs one. `index.js` in a repository is run as written,
+At the root of an app's repository every module runs, one after another. Name one
+to run only that: `vsa test send-message`, or any short name that picks it out —
+`vsa test send`. `--module <name>` is the same thing. `index.js` in a repository is run as written,
 unbundled, because that is the file the sandbox loads.
 
 ## `dev`
 
 ```bash
-vsa dev
-vsa dev --module send-message
-vsa dev --tier boosted
+vsa dev                    # every module in modules/
+vsa dev send-message       # one of them; the shortest name that picks it will do
+vsa dev --tier boosted     # a bigger machine
 vsa dev --local            # on this machine's Node, without the sandbox
 ```
 

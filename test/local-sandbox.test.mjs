@@ -180,6 +180,6 @@ test("vsa is the command, with va and visualautomate as the same binary", () => 
     assert.equal(new Set(Object.values(pkg.bin)).size, 1, "all three run the same file")
 
     const help = va(tmpdir()).out
-    assert.match(help, /vsa dev \[--module <name>\]\s+the sandbox/)
+    assert.match(help, /vsa dev \[<module>\]\s+the sandbox/)
     assert.match(help, /--local\s+`dev` without the sandbox/)
 })

@@ -33,12 +33,22 @@ function entryIn(dir: string): string | null {
     return ENTRIES.map((file) => join(dir, file)).find((file) => existsSync(file)) ?? null
 }
 
+/** The folders in modules/ that a name asks for: exact, then prefix, then contains. */
+export function matchFolders(folders: string[], name: string): string[] {
+    const wanted = name.trim().toLowerCase()
+    const exact = folders.filter((folder) => folder.toLowerCase() === wanted)
+    if (exact.length > 0) return exact
+    const prefix = folders.filter((folder) => folder.toLowerCase().startsWith(wanted))
+    if (prefix.length > 0) return prefix
+    return folders.filter((folder) => folder.toLowerCase().includes(wanted))
+}
+
 /**
  * Everything testable from `cwd`.
  *
- * At the root of an app's repository that is every module folder, or the one
- * named by `--module`. Inside a module folder, or in a plugin's directory, it is
- * that one.
+ * At the root of an app's repository that is every module folder, or the ones a
+ * name asks for — `vsa dev send` finds `modules/send-message`. Inside a module
+ * folder, or in a plugin's directory, it is that one and a name is not needed.
  */
 export function findTargets(cwd: string, only?: string): Target[] {
     const dir = resolve(cwd)
@@ -52,9 +62,9 @@ export function findTargets(cwd: string, only?: string): Target[] {
         if (folders.length === 0) {
             throw new Error("There is a modules/ folder here, but none of its folders has a manifest.json.")
         }
-        const chosen = only ? folders.filter((f) => f === only) : folders
+        const chosen = only ? matchFolders(folders, only) : folders
         if (only && chosen.length === 0) {
-            throw new Error(`No module "${only}" in modules/. There is: ${folders.join(", ")}.`)
+            throw new Error(`No module matches "${only}". This repository has: ${folders.join(", ")}.`)
         }
         return chosen.map((folder) => targetIn(join(modulesDir, folder), `modules/${folder}`)).filter(Boolean) as Target[]
     }
@@ -63,7 +73,7 @@ export function findTargets(cwd: string, only?: string): Target[] {
     if (!target) {
         throw new Error(
             "Nothing to test here: no plugin.ts, plugin.js or index.js, and no modules/ folder.\n"
-            + "Run this in a plugin's folder, at the root of its repository, or run `visualautomate init <name>`.",
+            + "Run this in a module's folder, at the root of its repository, or run `vsa init <name>`.",
         )
     }
     return [target]

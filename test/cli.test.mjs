@@ -103,7 +103,7 @@ test("an app's repository runs every module, or the one asked for", () => {
     assert.equal(one.code, 0, one.out)
     assert.doesNotMatch(one.out, /modules\/read/)
 
-    assert.match(va(dir, "test", "--module", "nope").out, /No module "nope"/)
+    assert.match(va(dir, "test", "--module", "nope").out, /No module matches "nope"/)
 })
 
 test("an allowed package that is not installed says how to install it", () => {
@@ -170,4 +170,39 @@ test("the ES-module rewrite leaves nothing the platform refuses", async () => {
         toSandboxModule("var plugin_default = { execute() {} };\nexport {\n  plugin_default as default\n};\n").trim(),
         "var plugin_default = { execute() {} };\nmodule.exports = plugin_default;",
     )
+})
+
+test("a module is named as the first argument, and a short name is enough", async () => {
+    const dir = scratch()
+    write(dir, {
+        "modules/send-message/manifest.json": { name: "send", outputs: ["success"] },
+        "modules/send-message/index.js": passing("Sent"),
+        "modules/list-channels/manifest.json": { name: "list", outputs: ["success"] },
+        "modules/list-channels/index.js": passing("Listed"),
+    })
+
+    const one = va(dir, "test", "send")
+    assert.equal(one.code, 0, one.out)
+    assert.match(one.out, /Sent/)
+    assert.doesNotMatch(one.out, /Listed/, "only the module that was named ran")
+
+    // The old spelling still works, and so does a name from the middle.
+    assert.match(va(dir, "test", "--module", "send-message").out, /Sent/)
+    assert.match(va(dir, "test", "chan").out, /Listed/)
+
+    const missing = va(dir, "test", "nope")
+    assert.equal(missing.code, 1)
+    assert.match(missing.out, /No module matches "nope"[\s\S]*list-channels, send-message/)
+
+    const { matchFolders } = await import(
+        "data:text/javascript," + encodeURIComponent(
+            (await build({
+                entryPoints: [fileURLToPath(new URL("../packages/cli/src/project.ts", import.meta.url))],
+                write: false, format: "esm", bundle: true, platform: "node",
+            })).outputFiles[0].text,
+        )
+    )
+    assert.deepEqual(matchFolders(["send-message", "send-file"], "send-message"), ["send-message"], "exact wins")
+    assert.deepEqual(matchFolders(["send-message", "send-file"], "send"), ["send-message", "send-file"], "both, and the error lists them")
+    assert.deepEqual(matchFolders(["send-message"], "MESSAGE"), ["send-message"], "case does not matter")
 })

@@ -1,6 +1,6 @@
 {
   "name": "@visualautomate/plugin-sdk",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Types and a local runner for building VisualAutomate plugins.",
   "license": "MIT",
   "type": "module",
