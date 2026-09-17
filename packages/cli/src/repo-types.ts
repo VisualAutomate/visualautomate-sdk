@@ -51,8 +51,8 @@ const JSCONFIG = `${JSON.stringify(
         compilerOptions: {
             target: "ES2022",
             lib: ["ES2022"],
-            module: "CommonJS",
-            moduleResolution: "node",
+            module: "node16",
+            moduleResolution: "node16",
             allowJs: true,
             // Off on purpose: a plugin may require any of the packages the
             // sandbox has, which are installed there and not here, and checking
