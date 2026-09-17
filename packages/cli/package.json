@@ -1,7 +1,7 @@
 {
   "name": "@visualautomate/cli",
   "version": "0.5.2",
-  "description": "Build and publish VisualAutomate plugins.",
+  "description": "Build and test VisualAutomate plugins.",
   "license": "MIT",
   "type": "module",
   "bin": {

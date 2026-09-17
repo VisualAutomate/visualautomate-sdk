@@ -1,15 +1,17 @@
 # @visualautomate/cli
 
-Build and publish VisualAutomate plugins.
+Build and test VisualAutomate plugins.
 
 ```bash
 npm install -g @visualautomate/cli
-vsa login
 vsa init my-step
 cd my-step
 vsa dev                 # the sandbox, and a run again on every save
-vsa push
 ```
+
+Nothing here signs in. Your plugin reaches the platform through its GitHub
+repository: push a commit, the tests run there, and Publish on the portal takes
+it from the commit that passed.
 
 `va` and `visualautomate` are the same command.
 
@@ -224,22 +226,15 @@ machine, and each run starts a fresh container.
 
 `context.media` is not available locally, in or out of Docker.
 
-## `push`
+## Publishing
 
-Bundles the same code `test` ran, strips the comments out of `manifest.json`,
-and publishes. A version snapshot is saved, so you can roll back from the
-dashboard.
+Not from here. Connect the repository to your app on the portal, push your
+commit, and the platform runs the same checks `vsa test` runs against every
+module it touched. Publish on the portal takes the code from a commit that
+passed, and a version snapshot is saved so you can roll back.
 
 Comments in `manifest.json` are a convenience of this tool: the file on your
-disk may have them, the bytes on the wire never do.
-
-## CI
-
-There is no browser on a build machine, so `login` is not available there. Set
-`VISUALAUTOMATE_API_TOKEN` instead — the same token `login` would have stored,
-which you can read out of `~/.visualautomate/config.json`.
-
-`VISUALAUTOMATE_API_URL` points the CLI at a different installation.
+disk may have them, and they are stripped before the manifest is read.
 
 ## Where things are
 

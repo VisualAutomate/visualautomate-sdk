@@ -1,13 +1,16 @@
 /**
  * The `visualautomate` command.
  *
- *   login    sign this machine in, through the browser
- *   init     start a plugin from a template
- *   test     run it here, with a context that behaves
- *   dev      the sandbox, and a run again on every save
- *   push     publish it to your account
- *   whoami   which account this machine is signed in as
- *   logout   forget the token
+ *   init          start a plugin from a template
+ *   test          run it here, with a context that behaves
+ *   dev           the sandbox, and a run again on every save
+ *   types         the declarations an editor reads
+ *   add:property  a field on the node, written into the manifest
+ *
+ * NOTHING HERE SIGNS IN. A plugin reaches the platform by being pushed to its
+ * GitHub repository, which is where the tests run and where Publish on the
+ * portal takes it from — so this holds no credential, talks to no API of ours,
+ * and everything it does works on a laptop with no account at all.
  *
  * WHAT THIS IS SHAPED AROUND: an author should install one thing and then never
  * think about tooling again. So the CLI carries the SDK inside it, compiles
@@ -17,12 +20,9 @@
  * directory that was created ten seconds ago.
  */
 
-import { createServer } from "node:http"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { existsSync, watch } from "node:fs"
-import { homedir } from "node:os"
 import { dirname, join, relative, resolve, sep } from "node:path"
-import { randomBytes } from "node:crypto"
 import { spawn } from "node:child_process"
 import { createRequire } from "node:module"
 
@@ -51,58 +51,6 @@ import { bold, dim, green, red, yellow } from "./colour"
 declare const __CLI_VERSION__: string
 const VERSION = typeof __CLI_VERSION__ === "string" ? __CLI_VERSION__ : "0.0.0-dev"
 
-const DEFAULT_API_URL = "https://visualautomate.com"
-
-// ─── Where the token lives ───────────────────────────────────────────────────
-
-/**
- * One file under the home directory, not an environment variable.
- *
- * An env var is fine for CI and hopeless for a person: it has to be set again
- * in every shell, and the usual way round that is pasting a credential into a
- * dotfile that ends up in a repository. VISUALAUTOMATE_API_TOKEN is still read
- * first, for exactly the CI case.
- */
-function configPath(): string {
-    return join(homedir(), ".visualautomate", "config.json")
-}
-
-interface Stored {
-    token?: string
-    apiUrl?: string
-    email?: string
-}
-
-async function readConfig(): Promise<Stored> {
-    try {
-        return JSON.parse(await readFile(configPath(), "utf8")) as Stored
-    } catch {
-        return {}
-    }
-}
-
-async function writeConfig(next: Stored): Promise<void> {
-    const path = configPath()
-    await mkdir(dirname(path), { recursive: true })
-    // 0600: it is a credential, and the default on a shared machine is not.
-    await writeFile(path, JSON.stringify(next, null, 2) + "\n", { mode: 0o600 })
-}
-
-async function tokenFor(flags: Flags): Promise<{ token: string; apiUrl: string }> {
-    const stored = await readConfig()
-    const apiUrl = (
-        flags["api-url"] ||
-        process.env.VISUALAUTOMATE_API_URL ||
-        stored.apiUrl ||
-        DEFAULT_API_URL
-    ).replace(/\/+$/, "")
-    const token = flags.token || process.env.VISUALAUTOMATE_API_TOKEN || stored.token
-    if (!token) {
-        fail("Not signed in. Run `visualautomate login` first.")
-    }
-    return { token, apiUrl }
-}
-
 // ─── Small helpers ───────────────────────────────────────────────────────────
 
 type Flags = Record<string, string>
@@ -125,129 +73,6 @@ class SilentExit extends Error {
 
 function ok(message: string): void {
     console.log(message)
-}
-
-/** Open a URL in whatever the platform calls a browser. Best effort. */
-function openBrowser(url: string): void {
-    const command =
-        process.platform === "win32" ? "cmd" : process.platform === "darwin" ? "open" : "xdg-open"
-    const args = process.platform === "win32" ? ["/c", "start", "", url] : [url]
-    try {
-        spawn(command, args, { stdio: "ignore", detached: true }).unref()
-    } catch {
-        /* the URL is printed as well, which is the fallback */
-    }
-}
-
-// ─── login ───────────────────────────────────────────────────────────────────
-
-/**
- * Sign in by listening on a loopback port and letting the browser deliver.
- *
- * The token arrives as a form POST rather than in a redirect's query string, so
- * it never reaches browser history or this process's argv. The platform's
- * /cli/login page is the other half.
- */
-async function cmdLogin(flags: Flags): Promise<void> {
-    const stored = await readConfig()
-    const apiUrl = (
-        flags["api-url"] ||
-        process.env.VISUALAUTOMATE_API_URL ||
-        stored.apiUrl ||
-        DEFAULT_API_URL
-    ).replace(/\/+$/, "")
-
-    const state = randomBytes(24).toString("base64url")
-
-    const token = await new Promise<string>((resolveToken, rejectToken) => {
-        const server = createServer((req, res) => {
-            if (!req.url?.startsWith("/callback") || req.method !== "POST") {
-                res.writeHead(404).end("Not found")
-                return
-            }
-            let body = ""
-            req.on("data", (chunk) => {
-                body += chunk
-                // A callback body is two short fields. Anything larger is not
-                // this flow, and reading it would be somebody else's decision
-                // about how much memory this process uses.
-                if (body.length > 8192) req.destroy()
-            })
-            req.on("end", () => {
-                const fields = new URLSearchParams(body)
-                const answer = (status: number, text: string) => {
-                    res.writeHead(status, { "Content-Type": "text/html; charset=utf-8" })
-                    res.end(
-                        `<!doctype html><meta charset="utf-8"><title>VisualAutomate</title>` +
-                            `<body style="font:16px system-ui;padding:3rem;max-width:32rem;margin:auto">${text}</body>`,
-                    )
-                }
-                if (fields.get("state") !== state) {
-                    answer(400, "<h1>That did not match</h1><p>Run <code>visualautomate login</code> again.</p>")
-                    return
-                }
-                const received = fields.get("token")
-                if (!received) {
-                    answer(400, "<h1>No token in the reply</h1><p>Run <code>visualautomate login</code> again.</p>")
-                    return
-                }
-                answer(200, "<h1>Signed in</h1><p>You can close this tab and go back to your terminal.</p>")
-                server.close()
-                resolveToken(received)
-            })
-        })
-
-        // Port 0: the operating system picks a free one, which is the only way
-        // to avoid colliding with whatever else the author is running.
-        server.listen(0, "127.0.0.1", () => {
-            const address = server.address()
-            if (!address || typeof address === "string") {
-                rejectToken(new Error("Could not open a port to listen on"))
-                return
-            }
-            const url = `${apiUrl}/cli/login?port=${address.port}&state=${state}`
-            ok(`Opening ${url}\n`)
-            ok("If your browser did not open, paste that address into it.")
-            openBrowser(url)
-        })
-
-        server.on("error", rejectToken)
-        setTimeout(() => {
-            server.close()
-            rejectToken(new Error("Timed out after five minutes waiting for the browser."))
-        }, 5 * 60_000).unref()
-    })
-
-    // Prove it works before storing it, so "signed in" means signed in.
-    const who = await whoami(apiUrl, token)
-    await writeConfig({ token, apiUrl, email: who.email })
-    ok(green(`\n✓ Signed in as ${who.email}`))
-    ok(`  Token stored in ${configPath()}`)
-}
-
-async function whoami(apiUrl: string, token: string): Promise<{ email: string; developer: boolean }> {
-    const res = await fetch(`${apiUrl}/api/cli/whoami`, {
-        headers: { Authorization: `Bearer ${token}` },
-    })
-    if (res.status === 401) fail("That token is not valid. Run `visualautomate login` again.")
-    if (!res.ok) fail(`Could not reach ${apiUrl} (status ${res.status}).`)
-    const data = (await res.json()) as { email?: string; pluginDeveloper?: boolean }
-    return { email: data.email ?? "(unknown)", developer: Boolean(data.pluginDeveloper) }
-}
-
-async function cmdWhoami(flags: Flags): Promise<void> {
-    const { token, apiUrl } = await tokenFor(flags)
-    const who = await whoami(apiUrl, token)
-    ok(`${who.email} on ${apiUrl}`)
-    if (!who.developer) {
-        ok("\nThis account is not a plugin developer yet, so `push` will be refused.")
-        ok("Turn it on from the dashboard under Developer settings.")
-    }
-}
-
-async function cmdLogout(): Promise<void> {
-    await writeConfig({})
-    ok("Signed out. The token file is empty.")
 }
 
 // ─── init ────────────────────────────────────────────────────────────────────
@@ -809,152 +634,18 @@ async function cmdDev(args: string[], flags: Flags): Promise<void> {
     })
 }
 
-// ─── push ────────────────────────────────────────────────────────────────────
-
-async function cmdPush(flags: Flags): Promise<void> {
-    const dir = process.cwd()
-    const { token, apiUrl } = await tokenFor(flags)
-
-    const metaPath = join(dir, "plugin.json")
-    const pkgPath = join(dir, "package.json")
-    const metaFile = existsSync(metaPath) ? metaPath : existsSync(pkgPath) ? pkgPath : null
-    if (!metaFile) {
-        fail("No plugin.json here. Run `visualautomate init <name>` to start a plugin.")
-    }
-    const meta = JSON.parse(await readFile(metaFile, "utf8")) as {
-        name?: string
-        version?: string
-        description?: string
-        category?: string
-        icon?: string
-    }
-    if (!meta.name) fail(`${metaFile} has no "name".`)
-    if (!meta.version || !/^\d+\.\d+\.\d+$/.test(meta.version)) {
-        fail(`${metaFile} needs a "version" like 1.0.0.`)
-    }
-
-    /**
-     * What the plugin declares.
-     *
-     * manifest.json first: it is where declarations are heading, it is what
-     * `init` writes, and it is a file somebody can open rather than a comment
-     * they have to go looking for.
-     *
-     * THE @schema BLOCK IS STILL READ when there is no manifest, and dropping
-     * that fallback would be a quiet act of vandalism: every plugin written
-     * before manifests existed declares itself in a comment, and refusing those
-     * would strand their authors on an old CLI. The server accepts both, so
-     * there is nothing to gain by being stricter here than it is.
-     */
-    const manifestPath = resolve(process.cwd(), "manifest.json")
-    let parsed: Record<string, unknown> = {}
-    let manifest: string | null = null
-    if (existsSync(manifestPath)) {
-        try {
-            // Comments are allowed in the file and not on the wire. The
-            // scaffolded manifest teaches its own format in commented-out
-            // examples, and the server parses what it is sent with a strict
-            // JSON.parse — stripping here means neither side gives anything up.
-            // See src/jsonc.ts.
-            const result = parseJsonc(await readFile(manifestPath, "utf8"))
-            parsed = result.value as Record<string, unknown>
-            manifest = result.json
-        } catch (error) {
-            // Checked here so the message names the file on this machine rather
-            // than coming back as a 400 from a server the author cannot see.
-            fail(`manifest.json is not valid JSON: ${error instanceof Error ? error.message : String(error)}`)
-        }
-    }
-
-    const entry = ["plugin.ts", "plugin.js", "index.ts", "index.js"]
-        .map((f) => join(dir, f))
-        .find((f) => existsSync(f))
-    if (!entry) {
-        fail("No plugin.ts or plugin.js here. Run `visualautomate init <name>` to start one.")
-    }
-    let code: string
-    try {
-        code = await bundlePlugin(entry)
-    } catch (error) {
-        fail(error instanceof Error ? error.message : String(error))
-    }
-
-    let schemaJson: string | null = null
-    if (!manifest) {
-        // Read from the source rather than the bundle: a bundler is free to
-        // drop comments, and this one is a comment.
-        const source = await readFile(entry, "utf8")
-        const match = source.match(/@schema\s*\n([\s\S]*?)(?:\*\s*\/|\*\/)/)
-        if (match) {
-            schemaJson = match[1].replace(/^\s*\*\s?/gm, "").trim()
-            try {
-                parsed = JSON.parse(schemaJson) as Record<string, unknown>
-            } catch (error) {
-                fail(`The @schema block is not valid JSON: ${error instanceof Error ? error.message : String(error)}`)
-            }
-        }
-    }
-
-    if (!manifest && !schemaJson) {
-        fail(
-            "This plugin declares nothing, so it would have no fields, no ports and no trigger —\n" +
-                "the canvas would show an empty box. Add a manifest.json next to your code (run\n" +
-                "`visualautomate init` somewhere to see one), or keep an @schema block in the source.",
-        )
-    }
-
-    ok(`Pushing ${meta.name}@${meta.version} to ${apiUrl}...`)
-
-    const res = await fetch(`${apiUrl}/api/plugins/push`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-            name: meta.name,
-            version: meta.version,
-            description: meta.description ?? (parsed.description as string) ?? "",
-            category: meta.category ?? "utility",
-            icon: meta.icon ?? (parsed.icon as string) ?? "plugin",
-            // Whichever the author actually has. The route takes either.
-            ...(manifest ? { manifest } : { schemaJson }),
-            code,
-        }),
-    })
-
-    const text = await res.text()
-    let data: { success?: boolean; pluginId?: string; error?: string } = {}
-    try {
-        data = JSON.parse(text) as typeof data
-    } catch {
-        fail(`The server answered ${res.status} with something that is not JSON:\n${text.slice(0, 500)}`)
-    }
-
-    if (res.status === 401) {
-        fail("Your session has expired. Run `visualautomate login` again.")
-    }
-    if (!res.ok || !data.success) {
-        fail(`Push refused: ${data.error ?? `status ${res.status}`}`)
-    }
-
-    ok(green(`\n✓ Published (id: ${data.pluginId})`))
-    ok(`  A version snapshot was saved, so you can roll back from the dashboard.`)
-}
-
 // ─── main ────────────────────────────────────────────────────────────────────
 
 function printHelp(): void {
     console.log(`
-vsa — build and publish VisualAutomate plugins
+vsa — build and test VisualAutomate plugins
 
-  vsa login                    sign this machine in
   vsa init <name> [--template] start a plugin
   vsa dev [<module>]           the sandbox, and a run again on every save
   vsa test [<module>]          run it once, as the platform's check does
   vsa types                    write the types your editor reads
   vsa add:property <type> <name> [description] [default]
                                add a field to a module's manifest
-  vsa push                     publish it
-  vsa whoami                   which account this is
-  vsa logout                   forget the token
   vsa --version                this CLI's version
 
 \`va\` and \`visualautomate\` are the same command.
@@ -983,9 +674,9 @@ Options for \`dev\` and \`test\`:
   --local              \`dev\` without the sandbox, on this machine's Node
   --docker             \`test\` inside the sandbox, as \`dev\` does
 
-Environment (for CI, where there is no browser):
-  VISUALAUTOMATE_API_TOKEN   use instead of \`login\`
-  VISUALAUTOMATE_API_URL     a different installation
+Your plugin reaches the platform through its GitHub repository: push a commit,
+the tests run there, and Publish on the portal takes it from the commit that
+passed. Nothing here needs an account.
 `)
 }
 
@@ -1015,12 +706,6 @@ async function main(): Promise<void> {
     }
 
     switch (command) {
-        case "login":
-            return cmdLogin(flags)
-        case "logout":
-            return cmdLogout()
-        case "whoami":
-            return cmdWhoami(flags)
         case "init":
         case "new":
             return cmdInit(args, flags)
@@ -1034,14 +719,9 @@ async function main(): Promise<void> {
         case "dev":
         case "watch":
             return cmdDev(args, flags)
-        case "push":
-        case "publish":
-            return cmdPush(flags)
-        // `plugin test` and `plugin push` are accepted as aliases.
+        // `plugin test` is accepted as an alias.
         case "plugin": {
-            const sub = args.shift()
-            if (sub === "test") return cmdTest(args, flags)
-            if (sub === "push") return cmdPush(flags)
+            if (args.shift() === "test") return cmdTest(args, flags)
             printHelp()
             return
         }
