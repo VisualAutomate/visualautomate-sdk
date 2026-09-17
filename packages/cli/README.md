@@ -77,6 +77,10 @@ Types: `string`, `number`, `boolean`, `select`, `multiselect`, `json`, `color`,
 `date`, `connection`, `file`, `path`, `paths`. A `select` or `multiselect` needs
 `--options`, and a `connection` needs `--provider <name>`.
 
+The same field is added to `visualautomate.test.json` under `config`, with its
+default or a value of the right shape, so the next `vsa test` passes something
+for it instead of nothing. A value you have already put there is kept.
+
 At the root of an app's repository, `--module <name>` says which one — the same
 short names `test` and `dev` take. The manifest is edited where it stands: your
 comments, the examples underneath and your own formatting stay as they are.

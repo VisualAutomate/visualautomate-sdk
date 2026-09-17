@@ -236,6 +236,11 @@ test("add:property writes a field into the manifest and leaves the rest of the f
 }
 `)
     writeFileSync(join(dir, "index.js"), passing("Hi"))
+    writeFileSync(join(dir, "visualautomate.test.json"), `{
+  "config": {},
+  "input": {}
+}
+`)
 
     assert.equal(va(dir, "add:property", "string", "apiKey", "The key to call with").code, 0)
     assert.equal(va(dir, "add:property", "number", "retries", "How many times", "2", "--required").code, 0)
@@ -255,6 +260,38 @@ test("add:property writes a field into the manifest and leaves the rest of the f
     assert.equal(manifest.properties.retries.required, true)
     assert.deepEqual(manifest.properties.mode.options[1], { label: "Thorough", value: "thorough" })
     assert.deepEqual(manifest.outputs, ["success"], "what was already there is untouched")
+
+    // And into the run's config, so the next `vsa test` passes something for it.
+    const run = JSON.parse(readFileSync(join(dir, "visualautomate.test.json"), "utf8"))
+    assert.deepEqual(run.config, { apiKey: "", retries: 2, mode: "fast" }, "the default, or the shape of the type")
+})
+
+test("add:property gives the test file a value of the right shape, and keeps one that is already there", () => {
+    const dir = scratch()
+    writeFileSync(join(dir, "manifest.json"), '{ "outputs": ["success"] }\n')
+    writeFileSync(join(dir, "index.js"), passing("Hi"))
+
+    // No test file yet: one is written, config first, because that is the part
+    // being filled in.
+    assert.equal(va(dir, "add:property", "number", "retries", "How many", "3").code, 0)
+    assert.deepEqual(JSON.parse(readFileSync(join(dir, "visualautomate.test.json"), "utf8")), {
+        config: { retries: 3 },
+        input: {},
+    })
+
+    // A config the author keeps on one line keeps its value and its one line.
+    rmSync(join(dir, "visualautomate.test.json"))
+    writeFileSync(join(dir, "test.json"), '{\n  "config": { "retries": 9 },\n  "input": {}\n}\n')
+    assert.equal(va(dir, "add:property", "boolean", "dryRun", "Say what it would do").code, 0)
+    assert.match(
+        readFileSync(join(dir, "test.json"), "utf8"),
+        /"config": \{ "retries": 9, "dryRun": false \}/,
+        "one line in, one line out",
+    )
+
+    // What the author put there is never written over.
+    assert.equal(va(dir, "add:property", "number", "another", "How many again", "1").code, 0)
+    assert.equal(JSON.parse(readFileSync(join(dir, "test.json"), "utf8")).config.retries, 9)
 })
 
 test("add:property says what is wrong instead of writing something broken", () => {

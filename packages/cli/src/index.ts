@@ -22,7 +22,7 @@
 
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { existsSync, watch } from "node:fs"
-import { dirname, join, relative, resolve, sep } from "node:path"
+import { basename, dirname, join, relative, resolve, sep } from "node:path"
 import { spawn } from "node:child_process"
 import { createRequire } from "node:module"
 
@@ -34,13 +34,14 @@ import { TEMPLATES, type TemplateName } from "./templates"
 import { parseJsonc } from "./jsonc"
 import {
     buildProperty,
-    hasProperty,
+    hasMember,
     isPropertyName,
     isPropertyType,
     PROPERTY_TYPES,
-    withProperty,
+    sampleFor,
+    withMember,
 } from "./manifest-property"
-import { findTargets, readTestFile, targetForPath, type Target } from "./project"
+import { findTargets, readTestFile, targetForPath, TEST_FILES, type Target } from "./project"
 import { toSandboxModule } from "./sandbox-module"
 import { guardFetch, policyFor } from "./egress"
 import { loadPersisted, persistEnabled, savePersisted } from "./persist"
@@ -516,32 +517,59 @@ async function cmdAddProperty(args: string[], flags: Flags): Promise<void> {
     if (!existsSync(file)) fail(`${target.name} has no manifest.json.`)
 
     const text = await readFile(file, "utf8")
-    if (hasProperty(text, name)) {
+    if (hasMember(text, "properties", name)) {
         fail(`${target.name} already has a property called ${name}. Change it in ${target.name}/manifest.json.`)
     }
 
+    let property: Record<string, unknown>
     let next: string
     try {
-        next = withProperty(
-            text,
+        property = buildProperty({
+            type,
             name,
-            buildProperty({
-                type,
-                name,
-                description,
-                value,
-                label: flags.label,
-                required: flags.required === "true",
-                options: flags.options,
-                provider: flags.provider,
-            }),
-        )
+            description,
+            value,
+            label: flags.label,
+            required: flags.required === "true",
+            options: flags.options,
+            provider: flags.provider,
+        })
+        next = withMember(text, "properties", name, property)
     } catch (error) {
         fail(error instanceof Error ? error.message : String(error))
     }
 
     await writeFile(file, next, "utf8")
-    ok(green(`✓ Added ${name} to ${target.name}`))
+    const written = [`${target.name}/manifest.json`]
+
+    /*
+     * And into the run's config, where it is about to be needed.
+     *
+     * A property that exists only in the manifest is a field `vsa test` passes
+     * nothing for, so the first run after adding one tests the empty case and
+     * the author goes looking for the right key to add by hand. Its default, or
+     * something of the right shape, is there before they ask.
+     */
+    const testPath = TEST_FILES.map((name) => join(target.dir, name)).find((path) => existsSync(path))
+        ?? join(target.dir, TEST_FILES[0])
+    const sample = sampleFor(property)
+    try {
+        const before = existsSync(testPath)
+            ? await readFile(testPath, "utf8")
+            // Enough for a run: the config this is about to fill in, and the
+            // input a module is given.
+            : `{\n  "config": {},\n  "input": {}\n}\n`
+        if (!hasMember(before, "config", name)) {
+            await writeFile(testPath, withMember(before, "config", name, sample), "utf8")
+            written.push(`${target.name}/${basename(testPath)}`)
+        }
+    } catch (error) {
+        // The manifest is written by now, and that is the part that was asked
+        // for. A test file somebody has made their own is not worth failing on.
+        ok(yellow(`  ${basename(testPath)} was left alone: ${error instanceof Error ? error.message : String(error)}`))
+    }
+
+    ok(green(`✓ Added ${name} to ${written.join(" and ")}`))
     ok(dim(`  Read it in your code as config.${name}`))
 }
 

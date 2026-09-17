@@ -275,32 +275,39 @@ function indented(value: unknown, indent: string, depth: number): string {
 }
 
 /**
- * The manifest with one property more.
+ * The file with one member more, inside the object `container` names.
  *
- * Three shapes, and each of them is a file somebody has: a manifest that
- * already has properties, one whose properties are still the commented-out
- * example, and one with nothing in it at all.
+ * Three shapes, and each of them is a file somebody has: one where the
+ * container is already there, one where it exists only in a commented-out
+ * example, and one with nothing in it at all. The manifest's `properties` and
+ * the test file's `config` are the same problem, so they are the same code —
+ * what differs is the name of the object and what goes in it.
  */
-export function withProperty(text: string, name: string, property: Record<string, unknown>): string {
+export function withMember(text: string, container: string, key: string, value: unknown): string {
     const bare = stripJsonComments(text)
     const { object, members } = topLevelMembers(bare)
-    if (!object || object.end === -1) throw new Error("This manifest is not a JSON object.")
+    if (!object || object.end === -1) throw new Error("This file is not a JSON object.")
 
     const indent = indentOf(text)
-    const entry = `"${name}": ${indented(property, indent, 2)}`
-    const existing = members.get("properties")
+    const entry = `"${key}": ${indented(value, indent, 2)}`
+    const existing = members.get(container)
 
     let next: string
     if (existing && bare[existing.start] === "{") {
         const last = lastContent(bare, existing.start, existing.end)
+        // An object the author keeps on one line stays on one line. Opening it
+        // out to add a member would reformat a file nobody asked to reformat.
+        const oneLine = last !== -1 && !text.slice(existing.start, existing.end).includes("\n")
         next = last === -1
-            // "properties": {}
+            // "container": {}
             ? text.slice(0, existing.start + 1) + `\n${indent.repeat(2)}${entry}\n${indent}` + text.slice(existing.end)
-            : text.slice(0, last + 1) + `,\n${indent.repeat(2)}${entry}` + text.slice(last + 1)
+            : oneLine
+                ? text.slice(0, last + 1) + `, "${key}": ${JSON.stringify(value)}` + text.slice(last + 1)
+                : text.slice(0, last + 1) + `,\n${indent.repeat(2)}${entry}` + text.slice(last + 1)
     } else if (existing) {
-        throw new Error('"properties" in this manifest is not an object, so nothing can be added to it.')
+        throw new Error(`"${container}" in this file is not an object, so nothing can be added to it.`)
     } else {
-        const block = `"properties": {\n${indent.repeat(2)}${entry}\n${indent}}`
+        const block = `"${container}": {\n${indent.repeat(2)}${entry}\n${indent}}`
         const last = lastContent(bare, object.start, object.end)
         next = last === -1
             ? text.slice(0, object.start + 1) + `\n${indent}${block}\n` + text.slice(object.end)
@@ -310,15 +317,45 @@ export function withProperty(text: string, name: string, property: Record<string
     // What was written is read back before it is offered: a file that no longer
     // parses is worse than a property nobody added, and the author would find
     // out at push time.
-    const parsed = JSON.parse(stripJsonComments(next)) as { properties?: Record<string, unknown> }
-    if (!parsed.properties || !(name in parsed.properties)) {
-        throw new Error("The property could not be placed in this manifest. Add it by hand, or say where this went wrong.")
+    const parsed = JSON.parse(stripJsonComments(next)) as Record<string, Record<string, unknown> | undefined>
+    if (!parsed[container] || !(key in parsed[container]!)) {
+        throw new Error(`${key} could not be placed in this file. Add it by hand, or say where this went wrong.`)
     }
     return next
 }
 
-/** Whether a manifest already has a property under that name. */
-export function hasProperty(text: string, name: string): boolean {
-    const parsed = JSON.parse(stripJsonComments(text)) as { properties?: Record<string, unknown> }
-    return Boolean(parsed.properties && typeof parsed.properties === "object" && name in parsed.properties)
+/** Whether the file already has that member inside that object. */
+export function hasMember(text: string, container: string, key: string): boolean {
+    const parsed = JSON.parse(stripJsonComments(text)) as Record<string, unknown>
+    const inside = parsed[container]
+    return Boolean(inside && typeof inside === "object" && !Array.isArray(inside) && key in inside)
+}
+
+/**
+ * What to put in the test file for a property of this type.
+ *
+ * The default when there is one — it is the value the author already said is
+ * sensible — and otherwise something of the right shape to edit: a test file
+ * whose config holds a string where a number belongs is a run that fails for a
+ * reason that has nothing to do with the plugin.
+ */
+export function sampleFor(property: Record<string, unknown>): unknown {
+    if ("default" in property) return property.default
+    switch (property.type as PropertyType) {
+        case "number":
+            return 0
+        case "boolean":
+            return false
+        case "multiselect":
+        case "paths":
+            return []
+        case "json":
+            return {}
+        case "select": {
+            const options = property.options as Array<{ value: string }> | undefined
+            return options?.[0]?.value ?? ""
+        }
+        default:
+            return ""
+    }
 }
