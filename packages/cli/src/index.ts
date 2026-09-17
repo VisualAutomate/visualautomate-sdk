@@ -32,6 +32,14 @@ import { TYPE_DECLARATIONS } from "./declarations"
 import { ensureRepoTypes, JSCONFIG_FILE, projectRoot, TYPES_FILE } from "./repo-types"
 import { TEMPLATES, type TemplateName } from "./templates"
 import { parseJsonc } from "./jsonc"
+import {
+    buildProperty,
+    hasProperty,
+    isPropertyName,
+    isPropertyType,
+    PROPERTY_TYPES,
+    withProperty,
+} from "./manifest-property"
 import { findTargets, readTestFile, targetForPath, type Target } from "./project"
 import { toSandboxModule } from "./sandbox-module"
 import { guardFetch, policyFor } from "./egress"
@@ -638,6 +646,80 @@ async function cmdTest(args: string[], flags: Flags): Promise<void> {
     if (!passed) process.exitCode = 1
 }
 
+/**
+ * `vsa add:property <type> <name> [description] [default]`
+ *
+ * A field on the node, written into the module's manifest.json. Typing one out
+ * by hand means knowing the key order, the label convention and which of the
+ * twelve types exist — all of it in a file most authors open twice a month —
+ * and getting it subtly wrong is not noticed until the node is on a canvas.
+ *
+ * The file is edited in place: comments, examples and the author's own
+ * formatting are left exactly as they are. See src/manifest-property.ts.
+ */
+async function cmdAddProperty(args: string[], flags: Flags): Promise<void> {
+    const [type, name, description, value] = args
+
+    if (!type || !name) {
+        fail(
+            "What property? vsa add:property <type> <name> [description] [default]\n"
+            + '  vsa add:property string apiKey "The key to call with"\n'
+            + '  vsa add:property number retries "How many times to try again" 2\n'
+            + `Types: ${PROPERTY_TYPES.join(", ")}`,
+        )
+    }
+    if (!isPropertyType(type)) {
+        fail(`There is no "${type}" property. Types: ${PROPERTY_TYPES.join(", ")}`)
+    }
+    if (!isPropertyName(name)) {
+        fail(`"${name}" is not a name your code can read: config.${name} has to be something you can write.`)
+    }
+
+    // Found the way `dev` and `test` find it, so knowing one is knowing the
+    // other: in the module's folder, or named from the repository root.
+    const targets = targetsOrFail([], flags)
+    if (targets.length > 1) {
+        const names = targets.map((t) => t.name.replace(/^modules\//, ""))
+        fail(
+            `Which module? This repository has ${names.join(", ")}.\n`
+            + `  vsa add:property ${type} ${name} --module ${names[0]}`,
+        )
+    }
+
+    const target = targets[0]
+    const file = join(target.dir, "manifest.json")
+    if (!existsSync(file)) fail(`${target.name} has no manifest.json.`)
+
+    const text = await readFile(file, "utf8")
+    if (hasProperty(text, name)) {
+        fail(`${target.name} already has a property called ${name}. Change it in ${target.name}/manifest.json.`)
+    }
+
+    let next: string
+    try {
+        next = withProperty(
+            text,
+            name,
+            buildProperty({
+                type,
+                name,
+                description,
+                value,
+                label: flags.label,
+                required: flags.required === "true",
+                options: flags.options,
+                provider: flags.provider,
+            }),
+        )
+    } catch (error) {
+        fail(error instanceof Error ? error.message : String(error))
+    }
+
+    await writeFile(file, next, "utf8")
+    ok(green(`✓ Added ${name} to ${target.name}`))
+    ok(dim(`  Read it in your code as config.${name}`))
+}
+
 // ─── dev ─────────────────────────────────────────────────────────────────────
 
 /**
@@ -868,6 +950,8 @@ vsa — build and publish VisualAutomate plugins
   vsa dev [<module>]           the sandbox, and a run again on every save
   vsa test [<module>]          run it once, as the platform's check does
   vsa types                    write the types your editor reads
+  vsa add:property <type> <name> [description] [default]
+                               add a field to a module's manifest
   vsa push                     publish it
   vsa whoami                   which account this is
   vsa logout                   forget the token
@@ -881,6 +965,15 @@ Templates: ${Object.keys(TEMPLATES).join(", ")}
 GitHub repository, and at the root of an app's repository, where every folder
 in modules/ is run (or the one you name: vsa dev send-message). The run's settings come
 from visualautomate.test.json, test.json, or --input <file>.
+
+Options for \`add:property\`:
+  --module <name>      which module, from the root of an app's repository
+  --required           the workflow will not run without it
+  --label <text>       instead of one made from the name
+  --options <list>     for select and multiselect: "Fast:fast,Thorough:thorough"
+  --provider <name>    for connection: whose account this is
+
+Property types: ${PROPERTY_TYPES.join(", ")}
 
 Options for \`dev\` and \`test\`:
   --module <name>      the same as naming it: vsa dev send-message
@@ -935,6 +1028,9 @@ async function main(): Promise<void> {
             return cmdTest(args, flags)
         case "types":
             return cmdTypes()
+        case "add:property":
+        case "add:prop":
+            return cmdAddProperty(args, flags)
         case "dev":
         case "watch":
             return cmdDev(args, flags)

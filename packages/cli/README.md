@@ -55,6 +55,30 @@ repository they go at the root, where they cover every module. Nothing is
 installed, nothing of it exists while your plugin runs, and a file you wrote
 yourself is never written over — delete ours and it comes back.
 
+## `add:property`
+
+A field on the node — what somebody fills in when they drop your module into a
+workflow — written into `manifest.json`:
+
+```bash
+vsa add:property string apiKey "The key to call with"
+vsa add:property number retries "How many times to try again" 2 --required
+vsa add:property select mode "Which way round" fast --options "Fast:fast,Thorough:thorough"
+```
+
+`<type> <name> [description] [default]`, where the name is what your code reads:
+`config.apiKey`. The label is made from the name unless `--label` says otherwise,
+and the default is stored as its type has it, so `2` is a number and `false` is a
+boolean.
+
+Types: `string`, `number`, `boolean`, `select`, `multiselect`, `json`, `color`,
+`date`, `connection`, `file`, `path`, `paths`. A `select` or `multiselect` needs
+`--options`, and a `connection` needs `--provider <name>`.
+
+At the root of an app's repository, `--module <name>` says which one — the same
+short names `test` and `dev` take. The manifest is edited where it stands: your
+comments, the examples underneath and your own formatting stay as they are.
+
 ## `test`
 
 Runs your plugin the way the platform would, in three steps:

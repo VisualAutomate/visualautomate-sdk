@@ -5,7 +5,7 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import { spawnSync } from "node:child_process"
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -220,4 +220,94 @@ test("a module is named as the first argument, and a short name is enough", asyn
     assert.deepEqual(matchFolders(["send-message", "send-file"], "send-message"), ["send-message"], "exact wins")
     assert.deepEqual(matchFolders(["send-message", "send-file"], "send"), ["send-message", "send-file"], "both, and the error lists them")
     assert.deepEqual(matchFolders(["send-message"], "MESSAGE"), ["send-message"], "case does not matter")
+})
+
+test("add:property writes a field into the manifest and leaves the rest of the file alone", () => {
+    const dir = scratch()
+    // A manifest as an author has it: one property, and the commented-out
+    // examples the scaffold writes underneath.
+    writeFileSync(join(dir, "manifest.json"), `{
+  "properties": {
+    "message": { "label": "Message", "type": "string" }
+  },
+  "outputs": ["success"]
+  // "properties" here is an example, not a member:
+  //   "retries": { "label": "Retries", "type": "number" }
+}
+`)
+    writeFileSync(join(dir, "index.js"), passing("Hi"))
+
+    assert.equal(va(dir, "add:property", "string", "apiKey", "The key to call with").code, 0)
+    assert.equal(va(dir, "add:property", "number", "retries", "How many times", "2", "--required").code, 0)
+    assert.equal(va(dir, "add:prop", "select", "mode", "Which way", "fast", "--options", "Fast:fast,Thorough:thorough").code, 0)
+
+    const text = readFileSync(join(dir, "manifest.json"), "utf8")
+    assert.match(text, /\/\/ {3}"retries": \{ "label": "Retries"/, "the comments are still there")
+    assert.match(text, /\{ "label": "Fast", "value": "fast" \}/, "a choice is one line")
+
+    const manifest = JSON.parse(text.split("\n").filter((line) => !line.trim().startsWith("//")).join("\n"))
+    assert.deepEqual(manifest.properties.apiKey, {
+        label: "Api key",
+        type: "string",
+        description: "The key to call with",
+    })
+    assert.equal(manifest.properties.retries.default, 2, "a number, not the string")
+    assert.equal(manifest.properties.retries.required, true)
+    assert.deepEqual(manifest.properties.mode.options[1], { label: "Thorough", value: "thorough" })
+    assert.deepEqual(manifest.outputs, ["success"], "what was already there is untouched")
+})
+
+test("add:property says what is wrong instead of writing something broken", () => {
+    const dir = scratch()
+    writeFileSync(join(dir, "manifest.json"), '{\n  "properties": { "message": { "label": "Message", "type": "string" } }\n}\n')
+    writeFileSync(join(dir, "index.js"), passing("Hi"))
+    const before = readFileSync(join(dir, "manifest.json"), "utf8")
+
+    for (const [args, expected] of [
+        [["add:property", "strng", "x"], /no "strng" property/],
+        [["add:property", "number", "n", "how many", "abc"], /not a number/],
+        [["add:property", "select", "s", "which"], /needs its choices/],
+        [["add:property", "connection", "c", "whose"], /needs the provider/],
+        [["add:property", "string", "api-key"], /not a name your code can read/],
+        [["add:property", "string", "message"], /already has a property called message/],
+        [["add:property"], /What property\?/],
+    ]) {
+        const run = va(dir, ...args)
+        assert.equal(run.code, 1, `${args.join(" ")}: ${run.out}`)
+        assert.match(run.out, expected)
+    }
+    assert.equal(readFileSync(join(dir, "manifest.json"), "utf8"), before, "nothing was written")
+})
+
+test("add:property adds the properties block to a manifest that has none", () => {
+    const dir = scratch()
+    writeFileSync(join(dir, "manifest.json"), '{\n  "outputs": ["success"]\n  //   "properties": { "mode": {} }\n}\n')
+    writeFileSync(join(dir, "index.js"), passing("Hi"))
+
+    assert.equal(va(dir, "add:property", "boolean", "dryRun", "Say what it would do", "false").code, 0)
+    const text = readFileSync(join(dir, "manifest.json"), "utf8")
+    assert.match(text, /\/\/ {3}"properties": \{ "mode": \{\} \}/, "the example in the comment is not the one that was edited")
+    const manifest = JSON.parse(text.split("\n").filter((line) => !line.trim().startsWith("//")).join("\n"))
+    assert.equal(manifest.properties.dryRun.default, false)
+    assert.deepEqual(manifest.outputs, ["success"])
+})
+
+test("add:property names the modules when a repository has more than one", () => {
+    const dir = scratch()
+    write(dir, {
+        "modules/send-message/manifest.json": { name: "send", outputs: ["success"] },
+        "modules/send-message/index.js": passing("Sent"),
+        "modules/list-channels/manifest.json": { name: "list", outputs: ["success"] },
+        "modules/list-channels/index.js": passing("Listed"),
+    })
+
+    const ambiguous = va(dir, "add:property", "string", "apiKey")
+    assert.equal(ambiguous.code, 1)
+    assert.match(ambiguous.out, /Which module\?[\s\S]*list-channels, send-message/)
+
+    assert.equal(va(dir, "add:property", "string", "apiKey", "The key", "--module", "send").code, 0)
+    const sent = JSON.parse(readFileSync(join(dir, "modules/send-message/manifest.json"), "utf8"))
+    assert.equal(sent.properties.apiKey.label, "Api key")
+    const listed = JSON.parse(readFileSync(join(dir, "modules/list-channels/manifest.json"), "utf8"))
+    assert.equal(listed.properties, undefined, "only the module that was named")
 })
