@@ -45,8 +45,11 @@ export function generatedBlocks() {
 
 /** The markdown with every marked block replaced by what it should hold. */
 export function filled(markdown) {
+    // Keep the file's own line endings, so a checkout with CRLF compares equal.
+    const eol = markdown.includes("\r\n") ? "\r\n" : "\n"
     let out = markdown
-    for (const [name, body] of Object.entries(generatedBlocks())) {
+    for (const [name, lines] of Object.entries(generatedBlocks())) {
+        const body = lines.split("\n").join(eol)
         const start = `<!-- ${name}:start -->`
         const end = `<!-- ${name}:end -->`
         const from = out.indexOf(start)
@@ -56,7 +59,7 @@ export function filled(markdown) {
         const inline = !body.includes("\n") && out[from - 1] !== "\n"
         out = inline
             ? `${out.slice(0, from + start.length)}${body}${out.slice(to)}`
-            : `${out.slice(0, from + start.length)}\n${body}\n${out.slice(to)}`
+            : `${out.slice(0, from + start.length)}${eol}${body}${eol}${out.slice(to)}`
     }
     return out
 }

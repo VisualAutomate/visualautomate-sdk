@@ -87,7 +87,7 @@ const examples = [
 const manifestOf = (name) => JSON.parse(readFileSync(join(EXAMPLES, name, "manifest.json"), "utf8"))
 
 test("SKILL.md has the frontmatter a skill is found by", () => {
-    const text = readFileSync(join(SKILL, "SKILL.md"), "utf8")
+    const text = readFileSync(join(SKILL, "SKILL.md"), "utf8").replace(/\r\n/g, "\n")
     const front = /^---\n([\s\S]*?)\n---\n/.exec(text)
     assert.ok(front, "SKILL.md starts with --- frontmatter ---")
     const name = /^name: (.+)$/m.exec(front[1])?.[1]
