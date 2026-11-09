@@ -1,0 +1,106 @@
+{
+  "description": "Open an issue on a repository",
+  "icon": "circle-dot",
+  "color": "#24292f",
+  "timeoutMs": 30000,
+  "version": 1,
+  "auth": {
+    "type": "oauth2",
+    "provider": "github",
+    "scopes": [
+      "repo"
+    ]
+  },
+  "properties": {
+    "account": {
+      "label": "GitHub account",
+      "type": "connection",
+      "provider": "github",
+      "required": true,
+      "description": "Which GitHub account this step acts as",
+      "group": "Account"
+    },
+    "owner": {
+      "label": "Owner",
+      "type": "string",
+      "required": true,
+      "description": "The user or organisation",
+      "group": "Repository"
+    },
+    "repo": {
+      "label": "Repository",
+      "type": "string",
+      "required": true,
+      "group": "Repository"
+    },
+    "title": {
+      "label": "Title",
+      "type": "string",
+      "required": true,
+      "group": "Issue"
+    },
+    "body": {
+      "label": "Description",
+      "type": "string",
+      "description": "Markdown is understood",
+      "group": "Issue"
+    },
+    "labels": {
+      "label": "Labels",
+      "type": "string",
+      "description": "Separated by commas",
+      "group": "Issue"
+    },
+    "assignees": {
+      "label": "Assignees",
+      "type": "string",
+      "description": "Usernames, separated by commas",
+      "group": "Issue"
+    }
+  },
+  "inputs": [
+    "input"
+  ],
+  "outputs": [
+    "success",
+    "error"
+  ],
+  "outputFields": {
+    "number": {
+      "type": "number",
+      "description": "The issue number, which every other step wants"
+    },
+    "id": {
+      "type": "text",
+      "description": "GitHub's internal id"
+    },
+    "url": {
+      "type": "text",
+      "description": "A link to it"
+    },
+    "state": {
+      "type": "text",
+      "description": "open or closed"
+    }
+  },
+  "action": {
+    "connection": "account",
+    "request": {
+      "method": "POST",
+      "path": "repos/{{config.owner}}/{{config.repo}}/issues",
+      "body": {
+        "title": "{{config.title}}",
+        "body": "{{config.body}}",
+        "labels": "{{config.labels | list}}",
+        "assignees": "{{config.assignees | list}}"
+      }
+    },
+    "errorPath": "message",
+    "outputs": {
+      "number": "{{response.number}}",
+      "id": "{{response.id}}",
+      "url": "{{response.html_url}}",
+      "state": "{{response.state}}"
+    }
+  }
+}

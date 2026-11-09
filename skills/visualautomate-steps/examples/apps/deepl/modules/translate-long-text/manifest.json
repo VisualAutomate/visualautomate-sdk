@@ -1,0 +1,72 @@
+{
+  "description": "Translate a long text paragraph by paragraph, in as many calls as it takes",
+  "icon": "file-text",
+  "color": "#0f2b46",
+  "timeoutMs": 60000,
+  "version": 1,
+  "auth": {
+    "type": "none"
+  },
+  "inputs": [
+    "input"
+  ],
+  "outputs": [
+    "success",
+    "error"
+  ],
+  "properties": {
+    "apiKey": {
+      "label": "DeepL API key",
+      "type": "secret",
+      "required": true,
+      "group": "Account",
+      "description": "From your DeepL account, under API keys"
+    },
+    "host": {
+      "label": "Plan",
+      "type": "select",
+      "default": "api-free.deepl.com",
+      "group": "Account",
+      "description": "Free keys end in :fx and use the free API",
+      "options": [
+        {
+          "label": "DeepL API Free",
+          "value": "api-free.deepl.com"
+        },
+        {
+          "label": "DeepL API Pro",
+          "value": "api.deepl.com"
+        }
+      ]
+    },
+    "text": {
+      "label": "Text",
+      "type": "string",
+      "required": true,
+      "group": "Translation",
+      "description": "Any length. Paragraphs are separated by an empty line"
+    },
+    "targetLang": {
+      "label": "Translate into",
+      "type": "string",
+      "required": true,
+      "default": "EN-GB",
+      "group": "Translation",
+      "description": "A language code such as DE, FR, NL or EN-GB. List languages gives every one"
+    }
+  },
+  "outputFields": {
+    "text": {
+      "type": "text",
+      "description": "The whole translation, paragraphs kept"
+    },
+    "paragraphs": {
+      "type": "number",
+      "description": "How many paragraphs were translated"
+    },
+    "calls": {
+      "type": "number",
+      "description": "How many requests it took"
+    }
+  }
+}

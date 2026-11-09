@@ -61,7 +61,9 @@ Leave out `request` for a step that only reshapes its fields:
 | `{{item}}`, `{{item.id}}` | the current item in `$map` or with `items` |
 | `{{cursor}}` | the next page's cursor, with `paginate` |
 
-A string that is exactly one token keeps its type (`"{{config.isHtml}}"` sends a boolean). Text around a token makes it a string. Dotted paths try a key containing dots first, so `{{response.@odata.nextLink}}` works.
+A string that is exactly one token keeps its type (`"{{config.isHtml}}"` sends a boolean). Text around a token makes it a string.
+
+**Empty values:** a `query` parameter that resolves to nothing (empty, `null`, missing) is left out of the request. A `body` field is sent as it resolves, so a field the user left blank can arrive as `""`. So put optional values in `query` where the API allows it; for an optional body field that an API refuses when empty, leave the field out of the step, or write code. Dotted paths try a key containing dots first, so `{{response.@odata.nextLink}}` works.
 
 Filters after a bar: `list` (value or comma-separated text to a list), `length`, `first`, `last`, `upper`, `lower`, `trim`, `number`, `json`.
 

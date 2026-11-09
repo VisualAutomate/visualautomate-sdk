@@ -1,0 +1,86 @@
+{
+  "description": "Add a comment to an issue or a pull request",
+  "icon": "message-square",
+  "color": "#24292f",
+  "timeoutMs": 30000,
+  "version": 1,
+  "auth": {
+    "type": "oauth2",
+    "provider": "github",
+    "scopes": [
+      "repo"
+    ]
+  },
+  "properties": {
+    "account": {
+      "label": "GitHub account",
+      "type": "connection",
+      "provider": "github",
+      "required": true,
+      "description": "Which GitHub account this step acts as",
+      "group": "Account"
+    },
+    "owner": {
+      "label": "Owner",
+      "type": "string",
+      "required": true,
+      "group": "Repository"
+    },
+    "repo": {
+      "label": "Repository",
+      "type": "string",
+      "required": true,
+      "group": "Repository"
+    },
+    "issue_number": {
+      "label": "Issue or pull request number",
+      "type": "number",
+      "required": true,
+      "group": "Comment"
+    },
+    "body": {
+      "label": "Comment",
+      "type": "string",
+      "required": true,
+      "description": "Markdown is understood",
+      "group": "Comment"
+    }
+  },
+  "inputs": [
+    "input"
+  ],
+  "outputs": [
+    "success",
+    "error"
+  ],
+  "outputFields": {
+    "id": {
+      "type": "text",
+      "description": "The comment's id"
+    },
+    "url": {
+      "type": "text",
+      "description": "A link to it"
+    },
+    "body": {
+      "type": "object",
+      "description": "What was written"
+    }
+  },
+  "action": {
+    "connection": "account",
+    "request": {
+      "method": "POST",
+      "path": "repos/{{config.owner}}/{{config.repo}}/issues/{{config.issue_number}}/comments",
+      "body": {
+        "body": "{{config.body}}"
+      }
+    },
+    "errorPath": "message",
+    "outputs": {
+      "id": "{{response.id}}",
+      "url": "{{response.html_url}}",
+      "body": "{{config.body}}"
+    }
+  }
+}

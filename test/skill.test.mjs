@@ -16,7 +16,7 @@ import { tmpdir } from "node:os"
 import { join, relative } from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { validatePluginCode } from "../packages/plugin-sdk/dist/index.mjs"
+import { loadPluginCode, sandboxRequire, simulate, validatePluginCode } from "../packages/plugin-sdk/dist/index.mjs"
 import { filled, SANDBOX_MD } from "../scripts/sync-skill.mjs"
 
 const SKILL = fileURLToPath(new URL("../skills/visualautomate-steps", import.meta.url))
@@ -65,7 +65,25 @@ function filesUnder(dir) {
     return out
 }
 
-const examples = readdirSync(EXAMPLES).filter((name) => statSync(join(EXAMPLES, name)).isDirectory())
+const isDir = (path) => statSync(path).isDirectory()
+const APPS = join(EXAMPLES, "apps")
+
+/** The plugin examples: every folder in examples/ but apps/. */
+const plugins = readdirSync(EXAMPLES).filter((name) => name !== "apps" && isDir(join(EXAMPLES, name)))
+
+/** The app examples, each with its modules. */
+const apps = readdirSync(APPS)
+    .filter((name) => isDir(join(APPS, name)))
+    .map((name) => ({
+        name,
+        modules: readdirSync(join(APPS, name, "modules")).filter((m) => isDir(join(APPS, name, "modules", m))),
+    }))
+
+/** Every step folder, plugin or module, by its path under examples/. */
+const examples = [
+    ...plugins,
+    ...apps.flatMap((app) => app.modules.map((m) => `apps/${app.name}/modules/${m}`)),
+]
 const manifestOf = (name) => JSON.parse(readFileSync(join(EXAMPLES, name, "manifest.json"), "utf8"))
 
 test("SKILL.md has the frontmatter a skill is found by", () => {
@@ -94,7 +112,42 @@ test("the sandbox reference lists exactly the SDK's packages, patterns and block
 test("the examples index lists every example, and nothing else", () => {
     const readme = readFileSync(join(EXAMPLES, "README.md"), "utf8")
     const listed = [...readme.matchAll(/^\| `([a-z0-9-]+)\/` \|/gm)].map((m) => m[1]).sort()
-    assert.deepEqual(listed, [...examples].sort())
+    assert.deepEqual(listed, [...plugins, "apps"].sort())
+
+    const appsReadme = readFileSync(join(APPS, "README.md"), "utf8")
+    const listedApps = [...appsReadme.matchAll(/^\| `([a-z0-9-]+)\/` \|/gm)].map((m) => m[1]).sort()
+    assert.deepEqual(listedApps, apps.map((a) => a.name).sort())
+    for (const app of apps) {
+        const own = readFileSync(join(APPS, app.name, "README.md"), "utf8")
+        for (const m of app.modules) assert.match(own, new RegExp(`\\| \`${m}\` \\|`), `apps/${app.name}/README.md lists ${m}`)
+    }
+})
+
+test("the modules of one app act as the same account", () => {
+    for (const app of apps) {
+        const accounts = new Set()
+        for (const m of app.modules) {
+            const manifest = manifestOf(`apps/${app.name}/modules/${m}`)
+            const connection = Object.values(manifest.properties ?? {}).find((p) => p.type === "connection")
+            if (connection) accounts.add(`${connection.provider} ${JSON.stringify(manifest.auth)}`)
+        }
+        assert.ok(accounts.size <= 1, `apps/${app.name}: modules disagree on the account: ${[...accounts].join(" / ")}`)
+    }
+})
+
+test("every app has at least one module, and the set covers apps with and without code", () => {
+    const hasCode = (app) => app.modules.some((m) => existsSync(join(APPS, app.name, "modules", m, "index.js")))
+    assert.ok(apps.every((app) => app.modules.length > 0))
+    assert.ok(apps.some((app) => !hasCode(app)), "an app without code")
+    assert.ok(apps.some(hasCode), "an app with code")
+})
+
+test("an app's runnable code modules pass `vsa test` from the app's root", () => {
+    const dir = scratch()
+    cpSync(join(APPS, "deepl"), join(dir, "deepl"), { recursive: true })
+    const run = vsa(join(dir, "deepl"), ["test", "translate-long-text"])
+    assert.equal(run.code, 0, run.out)
+    assert.match(run.out, /passed/)
 })
 
 test("every example's code passes the platform's code check", () => {
@@ -173,6 +226,57 @@ test("an example that acts as an account passes the code checks and stops at the
     const run = vsa(join(dir, "connection-account"), ["test"])
     assert.doesNotMatch(run.out, /refused/)
     assert.match(run.out, /context\.connections is not available locally/)
+})
+
+test("the Gmail send-email module builds the message Gmail expects, and refuses cleanly", async () => {
+    const code = readFileSync(join(APPS, "gmail", "modules", "send-email", "index.js"), "utf8")
+    const check = validatePluginCode(code)
+    assert.ok(check.valid, check.error)
+    assert.deepEqual(check.packages, ["js-base64"])
+
+    // js-base64 is in the sandbox, not in this repository: stand in for it with
+    // Node's own base64, which is what the package does for these two calls.
+    const base64 = {
+        Base64: {
+            encode: (text) => Buffer.from(text, "utf8").toString("base64"),
+            encodeURI: (text) => Buffer.from(text, "utf8").toString("base64url"),
+        },
+    }
+    const plugin = loadPluginCode(code, sandboxRequire((name) => {
+        if (name === "js-base64") return base64
+        throw new Error(`not stubbed: ${name}`)
+    }))
+
+    const refused = await simulate(plugin, { config: { to: "", subject: "Hello", body: "Hi" } })
+    assert.equal(refused.output?.output, "error")
+
+    let asked
+    const sent = await simulate(plugin, {
+        config: { to: "ada@example.com, alan@example.com", subject: "Grüße", body: "Hallo", isHtml: false },
+        connections: {
+            async get(name) {
+                assert.equal(name, "account")
+                return {
+                    id: "test",
+                    async request(req) {
+                        asked = req
+                        return { ok: true, status: 200, body: { id: "m1", threadId: "t1" } }
+                    },
+                }
+            },
+        },
+    })
+    assert.equal(sent.output?.output, "success", JSON.stringify(sent))
+    assert.deepEqual(sent.output.data, { id: "m1", threadId: "t1", to: ["ada@example.com", "alan@example.com"] })
+    assert.equal(asked.method, "POST")
+    assert.equal(asked.path, "gmail/v1/users/me/messages/send")
+    assert.doesNotMatch(asked.body.raw, /[+/=]/, "raw is base64url without padding")
+
+    const message = Buffer.from(asked.body.raw, "base64url").toString("utf8")
+    assert.match(message, /^To: ada@example\.com, alan@example\.com\r\n/)
+    assert.match(message, /\r\nSubject: =\?UTF-8\?B\?R3LDvMOfZQ==\?=\r\n/)
+    assert.match(message, /\r\nContent-Type: text\/plain; charset=UTF-8\r\n/)
+    assert.match(message, /\r\n\r\nSGFsbG8=$/)
 })
 
 test("`vsa skill --dir` installs exactly the skill in this repository", () => {

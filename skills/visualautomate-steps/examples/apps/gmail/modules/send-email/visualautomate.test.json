@@ -1,0 +1,9 @@
+{
+  "config": {
+    "to": "",
+    "subject": "Hello",
+    "body": "From a test"
+  },
+  "input": {},
+  "expectOutput": "error"
+}

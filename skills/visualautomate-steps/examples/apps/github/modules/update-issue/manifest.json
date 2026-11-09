@@ -1,0 +1,118 @@
+{
+  "description": "Change an issue's title, body, state or labels",
+  "icon": "pencil",
+  "color": "#24292f",
+  "timeoutMs": 30000,
+  "version": 1,
+  "auth": {
+    "type": "oauth2",
+    "provider": "github",
+    "scopes": [
+      "repo"
+    ]
+  },
+  "properties": {
+    "account": {
+      "label": "GitHub account",
+      "type": "connection",
+      "provider": "github",
+      "required": true,
+      "description": "Which GitHub account this step acts as",
+      "group": "Account"
+    },
+    "owner": {
+      "label": "Owner",
+      "type": "string",
+      "required": true,
+      "group": "Repository"
+    },
+    "repo": {
+      "label": "Repository",
+      "type": "string",
+      "required": true,
+      "group": "Repository"
+    },
+    "issue_number": {
+      "label": "Issue number",
+      "type": "number",
+      "required": true,
+      "group": "Issue"
+    },
+    "title": {
+      "label": "Title",
+      "type": "string",
+      "group": "Issue"
+    },
+    "body": {
+      "label": "Description",
+      "type": "string",
+      "group": "Issue"
+    },
+    "state": {
+      "label": "State",
+      "type": "select",
+      "default": "",
+      "options": [
+        {
+          "label": "Leave as it is",
+          "value": ""
+        },
+        {
+          "label": "Open",
+          "value": "open"
+        },
+        {
+          "label": "Closed",
+          "value": "closed"
+        }
+      ],
+      "group": "Issue"
+    },
+    "labels": {
+      "label": "Labels",
+      "type": "string",
+      "description": "Replaces the labels on the issue",
+      "group": "Issue"
+    }
+  },
+  "inputs": [
+    "input"
+  ],
+  "outputs": [
+    "success",
+    "error"
+  ],
+  "outputFields": {
+    "number": {
+      "type": "number",
+      "description": "The issue that changed"
+    },
+    "url": {
+      "type": "text",
+      "description": "A link to it"
+    },
+    "state": {
+      "type": "text",
+      "description": "Its state afterwards"
+    }
+  },
+  "action": {
+    "connection": "account",
+    "request": {
+      "method": "PATCH",
+      "path": "repos/{{config.owner}}/{{config.repo}}/issues/{{config.issue_number}}",
+      "body": {
+        "title": "{{config.title}}",
+        "body": "{{config.body}}",
+        "state": "{{config.state}}",
+        "labels": "{{config.labels | list}}"
+      }
+    },
+    "errorPath": "message",
+    "outputs": {
+      "number": "{{response.number}}",
+      "url": "{{response.html_url}}",
+      "state": "{{response.state}}"
+    }
+  }
+}

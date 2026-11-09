@@ -1,0 +1,90 @@
+{
+  "description": "Find messages with Gmail's own search syntax",
+  "icon": "search",
+  "color": "#ea4335",
+  "timeoutMs": 30000,
+  "version": 1,
+  "auth": {
+    "type": "oauth2",
+    "provider": "google-mail",
+    "scopes": [
+      "https://www.googleapis.com/auth/gmail.modify"
+    ]
+  },
+  "properties": {
+    "account": {
+      "label": "Google account",
+      "type": "connection",
+      "provider": "google-mail",
+      "required": true,
+      "description": "Which Gmail account this step acts as",
+      "group": "Account"
+    },
+    "q": {
+      "label": "Search",
+      "type": "string",
+      "description": "e.g. from:ada@x.com is:unread newer_than:7d",
+      "group": "Search"
+    },
+    "labelIds": {
+      "label": "Labels",
+      "type": "string",
+      "description": "Label ids, separated by commas",
+      "group": "Search"
+    },
+    "maxResults": {
+      "label": "How many",
+      "type": "number",
+      "default": 25,
+      "min": 1,
+      "max": 500,
+      "group": "Search"
+    }
+  },
+  "inputs": [
+    "input"
+  ],
+  "outputs": [
+    "success",
+    "error"
+  ],
+  "outputFields": {
+    "messages": {
+      "type": "list",
+      "description": "The matches, each with an id and a thread id — read one to get its content",
+      "fields": {
+        "id": "text",
+        "threadId": "text",
+        "snippet": "text",
+        "labelIds": "list",
+        "payload": "list"
+      }
+    },
+    "count": {
+      "type": "number",
+      "description": "How many came back"
+    },
+    "estimate": {
+      "type": "number",
+      "description": "Gmail's guess at the total"
+    }
+  },
+  "action": {
+    "connection": "account",
+    "request": {
+      "method": "GET",
+      "path": "gmail/v1/users/me/messages",
+      "query": {
+        "q": "{{config.q}}",
+        "labelIds": "{{config.labelIds | list}}",
+        "maxResults": "{{config.maxResults}}"
+      }
+    },
+    "errorPath": "error.message",
+    "outputs": {
+      "messages": "{{response.messages}}",
+      "count": "{{response.messages | length}}",
+      "estimate": "{{response.resultSizeEstimate}}"
+    }
+  }
+}

@@ -1,6 +1,6 @@
 # Examples
 
-Working steps to start from. Copy the closest one into the repository (a plugin's root, or `modules/<slug>/` in an app) and change it.
+Working steps to start from. Copy the closest one into the repository (a plugin's root, or `modules/<slug>/` in an app) and change it. For a whole app, start from `apps/`.
 
 Every code example passes the platform's code check, and the ones that need no network, account or extra package are run with `vsa test` by this repository's tests, so they cannot quietly go stale.
 
@@ -19,5 +19,6 @@ Every code example passes the platform's code check, and the ones that need no n
 | `declared-connection-list/` | declared | A list from a connected account, with `items` and page-by-page `paginate` |
 | `declared-reshape/` | declared | No request at all: outputs built from the fields with filters |
 | `trigger-new-mail/` | trigger | A starting point that polls a mailbox, from now on |
+| `apps/` | apps | Whole apps in the `modules/` shape: GitHub and Slack without code, Gmail and DeepL with declared and code modules side by side. See `apps/README.md` |
 
 Declared steps and triggers have no `index.js` and are tested in the developer portal's editor, not by `vsa test`.

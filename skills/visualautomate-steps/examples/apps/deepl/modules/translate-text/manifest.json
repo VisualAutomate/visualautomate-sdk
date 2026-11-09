@@ -1,0 +1,88 @@
+{
+  "description": "Translate a piece of text with DeepL",
+  "icon": "languages",
+  "color": "#0f2b46",
+  "timeoutMs": 30000,
+  "version": 1,
+  "auth": {
+    "type": "none"
+  },
+  "inputs": [
+    "input"
+  ],
+  "outputs": [
+    "success",
+    "error"
+  ],
+  "properties": {
+    "apiKey": {
+      "label": "DeepL API key",
+      "type": "secret",
+      "required": true,
+      "group": "Account",
+      "description": "From your DeepL account, under API keys"
+    },
+    "host": {
+      "label": "Plan",
+      "type": "select",
+      "default": "api-free.deepl.com",
+      "group": "Account",
+      "description": "Free keys end in :fx and use the free API",
+      "options": [
+        {
+          "label": "DeepL API Free",
+          "value": "api-free.deepl.com"
+        },
+        {
+          "label": "DeepL API Pro",
+          "value": "api.deepl.com"
+        }
+      ]
+    },
+    "text": {
+      "label": "Text",
+      "type": "string",
+      "required": true,
+      "group": "Translation"
+    },
+    "targetLang": {
+      "label": "Translate into",
+      "type": "string",
+      "required": true,
+      "default": "EN-GB",
+      "group": "Translation",
+      "description": "A language code such as DE, FR, NL or EN-GB. List languages gives every one"
+    }
+  },
+  "outputFields": {
+    "text": {
+      "type": "text",
+      "description": "The translation"
+    },
+    "detected": {
+      "type": "text",
+      "description": "The language DeepL found the text was in"
+    }
+  },
+  "action": {
+    "baseUrl": "https://{{config.host}}/v2",
+    "request": {
+      "method": "POST",
+      "path": "translate",
+      "headers": {
+        "Authorization": "DeepL-Auth-Key {{config.apiKey}}"
+      },
+      "body": {
+        "text": [
+          "{{config.text}}"
+        ],
+        "target_lang": "{{config.targetLang | upper}}"
+      }
+    },
+    "errorPath": "message",
+    "outputs": {
+      "text": "{{response.translations.0.text}}",
+      "detected": "{{response.translations.0.detected_source_language}}"
+    }
+  }
+}

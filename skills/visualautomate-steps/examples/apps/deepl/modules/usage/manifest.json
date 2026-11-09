@@ -1,0 +1,68 @@
+{
+  "description": "How much of this month's character allowance is used",
+  "icon": "gauge",
+  "color": "#0f2b46",
+  "timeoutMs": 30000,
+  "version": 1,
+  "auth": {
+    "type": "none"
+  },
+  "inputs": [
+    "input"
+  ],
+  "outputs": [
+    "success",
+    "error"
+  ],
+  "properties": {
+    "apiKey": {
+      "label": "DeepL API key",
+      "type": "secret",
+      "required": true,
+      "group": "Account",
+      "description": "From your DeepL account, under API keys"
+    },
+    "host": {
+      "label": "Plan",
+      "type": "select",
+      "default": "api-free.deepl.com",
+      "group": "Account",
+      "description": "Free keys end in :fx and use the free API",
+      "options": [
+        {
+          "label": "DeepL API Free",
+          "value": "api-free.deepl.com"
+        },
+        {
+          "label": "DeepL API Pro",
+          "value": "api.deepl.com"
+        }
+      ]
+    }
+  },
+  "outputFields": {
+    "used": {
+      "type": "number",
+      "description": "Characters translated this period"
+    },
+    "limit": {
+      "type": "number",
+      "description": "Characters allowed this period"
+    }
+  },
+  "action": {
+    "baseUrl": "https://{{config.host}}/v2",
+    "request": {
+      "method": "GET",
+      "path": "usage",
+      "headers": {
+        "Authorization": "DeepL-Auth-Key {{config.apiKey}}"
+      }
+    },
+    "errorPath": "message",
+    "outputs": {
+      "used": "{{response.character_count}}",
+      "limit": "{{response.character_limit}}"
+    }
+  }
+}

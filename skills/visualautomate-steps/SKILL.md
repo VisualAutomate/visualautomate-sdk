@@ -18,6 +18,7 @@ Read this file first. Open a file in `references/` when you reach the part it co
 | `references/sandbox.md` | requiring an npm package, calling `fetch`, or `vsa test` refuses code |
 | `references/test-and-publish.md` | writing the test file, running the CLI, handing over |
 | `examples/` | before writing a step of the same kind: start from the closest one |
+| `examples/apps/` | building an app with several modules: GitHub and Slack (declared only), Gmail and DeepL (declared and code mixed) |
 
 ## The workflow
 
@@ -55,6 +56,8 @@ Say which you chose and why in one line when you hand over.
 | Several steps for one service (an **app** with **modules**) | `modules/<module-slug>/` with those three files in each folder. The app itself has no code |
 
 A declared step or a trigger has no `index.js`. Module folder names are short kebab-case slugs: `send-message`, `list-invoices`.
+
+In an app, decide per module: the reads and simple writes are usually declared, and only the modules that need more are code (see `examples/apps/gmail`, where sending needs code and the rest does not). Every module that acts as the account declares the same `connection` property (`account`) with the same provider and `auth`; the app's name, logo and connection are set on the portal, not in the repository.
 
 If the user is already in a repository, follow its shape. If they ran `vsa init`, they have a TypeScript playground (`plugin.ts`); the repository shape above is what gets published.
 
