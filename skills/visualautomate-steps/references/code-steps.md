@@ -30,7 +30,9 @@ module.exports = {
 
 Rules for the file: CommonJS, loaded as written with no build step. No `import` anywhere (comments included). `require` only allowed packages by bare name. See `sandbox.md`.
 
-Accepted export forms: `module.exports = { execute }`, `module.exports.execute = fn`, `module.exports = fn`.
+Accepted export forms: `module.exports = { execute }`, `module.exports.execute = fn`, `module.exports = fn`, or `module.exports.default = fn` (a function). A `default` that is an object with `execute` on it is **not** found by the runner.
+
+The file is loaded in a `vm` context with the platform's globals only (see `sandbox.md`): no `Buffer`, `process`, `globalThis` or `structuredClone`, and a `console` with `log`, `error`, `warn` and `info`. End the file with a newline.
 
 ## `input`
 
@@ -70,7 +72,8 @@ Paths are scoped to the account; never prefix them.
 | `delete(path)` | nothing |
 | `list(prefix?)` | `{ files: [{ url, pathname, size, uploadedAt }], totalSize }` |
 | `head(path)` | `{ size, contentType }` or `null` |
-| `signedUrl(path, seconds?)` | a public link, 60 to 3600 seconds (default 900) |
+| `signedUrl(path, seconds?)` | the storage bucket's link, for an API that fetches the file: 60 to 3600 seconds (default 900) |
+| `shareUrl(path, seconds?)` | a link on VisualAutomate's own domain, for a person: a mail, a message (default 900 seconds) |
 | `download(url, path, contentType?)` | pulls a URL straight into storage. Optional: check `if (context.storage.download)` |
 
 Decode text with `new TextDecoder().decode(bytes)`.
@@ -82,7 +85,7 @@ Decode text with `new TextDecoder().decode(bytes)`.
 | `get(key)` | the value, or `null` if never set |
 | `set(key, value, { ttlSeconds? })` | any JSON value, at most 128 KB. `ttlSeconds` at least 60 |
 | `delete(key)` | |
-| `list(prefix?)` | `{ keys: [...] }` |
+| `list(prefix?)` | `{ keys: [{ key, expiresAt }], complete }`: each key with when it expires (`null` for never); `complete` is false when there were more |
 
 For cursors, seen-ids (keep them bounded: `seen.slice(-500)`), counters, short locks. Large data goes in storage, with its path in state.
 
@@ -103,7 +106,7 @@ const res = await account.request({
 // res: { ok, status, headers?, body }  (the provider's own reply, body parsed when JSON)
 ```
 
-There is no way to read the token, and no way to choose the host. A step whose test cannot supply an account should be tested for its clean failure: `expectOutput: "error"`.
+There is no way to read the token, and no way to choose the host. `context.connections` is absent when no account was chosen, which is also how `vsa test` runs a step locally: check for it. For the push check, and for publishing, name an account in the test file's `config` (see `test-and-publish.md`).
 
 ### `context.media`
 

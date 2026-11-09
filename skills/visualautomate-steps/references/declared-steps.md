@@ -2,7 +2,7 @@
 
 One HTTP request described in the manifest, made by the platform. No `index.js`, no sandbox, one credit per run for the user, and reviewable at a glance. Use it whenever a step is a single call (or no call at all). It cannot transform: no base64, no combining two calls, no arithmetic. That needs code.
 
-Not run by `vsa test` or the push check: the developer portal's editor tests it with **Try it**, against an account the user picks.
+`vsa test` checks the manifest (connection or `baseUrl`, a relative path, `https://`, no `{{input}}` in `baseUrl`, items and pages) but does not run it, and neither does the push check: the developer portal's editor runs it with **Try it**, against an account the user picks. Publishing needs a passing Try it, on the success port, on the saved version.
 
 ## Shape
 

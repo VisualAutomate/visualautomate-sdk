@@ -14,13 +14,25 @@
 import { readFileSync, writeFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 
-import { ALLOWED_PACKAGES, BLOCKED_GLOBALS, RESTRICTED_PATTERNS } from "../packages/plugin-sdk/dist/index.mjs"
+import {
+    ALLOWED_PACKAGES,
+    BLOCKED_GLOBAL_NAMES,
+    BLOCKED_GLOBALS,
+    PLATFORM_NODE_MAJOR,
+    PROVIDED_GLOBALS,
+    RESTRICTED_PATTERNS,
+    SANDBOX_TIERS,
+} from "../packages/plugin-sdk/dist/index.mjs"
 
 export const SANDBOX_MD = fileURLToPath(new URL("../skills/visualautomate-steps/references/sandbox.md", import.meta.url))
 
 /** What belongs between each pair of markers. */
 export function generatedBlocks() {
     return {
+        node: `**Node.js ${PLATFORM_NODE_MAJOR}**`,
+        provided: PROVIDED_GLOBALS.filter((name) => name !== "require").map((name) => `\`${name}\``).join(", "),
+        blocked: BLOCKED_GLOBAL_NAMES.map((name) => `\`${name}\``).join(", "),
+        tiers: SANDBOX_TIERS.map((t) => `\`${t.id}\` ${t.vcpus} vCPU and ${t.memoryGb} GB`).join(", "),
         globals: [
             "| Name | Instead |",
             "| --- | --- |",
@@ -40,7 +52,11 @@ export function filled(markdown) {
         const from = out.indexOf(start)
         const to = out.indexOf(end)
         if (from < 0 || to < from) throw new Error(`sandbox.md has no ${start} … ${end} block`)
-        out = `${out.slice(0, from + start.length)}\n${body}\n${out.slice(to)}`
+        // A block inside a sentence stays on its line; a block of its own gets lines of its own.
+        const inline = !body.includes("\n") && out[from - 1] !== "\n"
+        out = inline
+            ? `${out.slice(0, from + start.length)}${body}${out.slice(to)}`
+            : `${out.slice(0, from + start.length)}\n${body}\n${out.slice(to)}`
     }
     return out
 }

@@ -39,7 +39,7 @@ Declares a step: the fields the canvas draws, the ports it leaves by, what it ha
 | `outputs` | string[] | Ports. Default `["success", "error"]`. Each is a line a user can draw from |
 | `outputFields` | object | Describes the keys of `data` for the next step's picker: `{ "id": "The new id" }`, or `{ "items": { "type": "list", "description": "..." } }` |
 | `auth` | object | `{ "type": "oauth2" \| "api_key" \| "basic" \| "none", "provider"?: "...", "scopes"?: [...] }` |
-| `timeoutMs` | number | Default 10000, max 60000, and never more than the user's plan allows |
+| `timeoutMs` | number | Default 10000 on a canvas and 30000 in the push check, max 60000, and never more than the user's plan allows. The push check reads it here, not from the test file |
 | `memoryLimitMb` | number | Default 32, max 128 |
 | `action` | object | A declared step. See `declared-steps.md` |
 | `trigger` | object | A trigger. See `triggers.md` |
@@ -61,6 +61,11 @@ The key is the name in code: property `title` is `config.title`.
 | `options` | For `select`/`multiselect`: `[{ "label": "Fast", "value": "fast" }]` |
 | `min`, `max` | For `number` |
 | `pattern` | For `string`: a regex the value must match, e.g. `"^https://"` |
+| `help` | Longer help, shown on request |
+| `disabled` | Shown but not editable |
+| `optionsFrom` | For `select`/`multiselect`: read the options from the account, `{ "connection": "account", "request": { "path": "…" }, "items": { "path": "…" }, "label": "{{item.name}}", "value": "{{item.id}}" }`. GET only |
+| `sentTo` | For `secret`: the properties that say where it is sent (a server URL); the stored key is kept only while they are unchanged |
+| `verbatim` | For `secret`: sent exactly as typed, never computed with |
 | `provider` | For `connection`: the provider id, e.g. `outlook`, `github`. A module inherits its app's |
 
 ### Types

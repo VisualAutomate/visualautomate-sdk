@@ -163,9 +163,10 @@ test("the container gets the tier's limits, no privileges and only the project",
     })
     const after = (flag) => args[args.indexOf(flag) + 1]
 
-    assert.equal(after("--cpus"), "0.5")
-    assert.equal(after("--memory"), "4g")
-    assert.equal(after("--memory-swap"), "4g", "swap would let a run use more than its tier")
+    // The platform's boosted machine: a whole vCPU and six gigabytes.
+    assert.equal(after("--cpus"), "1")
+    assert.equal(after("--memory"), "6g")
+    assert.equal(after("--memory-swap"), "6g", "swap would let a run use more than its tier")
     assert.equal(after("--volume"), "/home/me/plugin:/work")
     assert.equal(after("--user"), "1000:1000")
     assert.ok(args.includes("--read-only"))
@@ -176,8 +177,8 @@ test("the container gets the tier's limits, no privileges and only the project",
 
     assert.deepEqual(forwardedFlags({ docker: "true", tier: "max", image: "x", persist: "true", input: "a.json" }), ["--persist", "--input", "a.json"])
     const { explainExit } = await source("docker")
-    assert.match(explainExit(137, "standard"), /more than the 1 GB of memory the standard tier has[\s\S]*--tier boosted/)
-    assert.doesNotMatch(explainExit(137, "max"), /--tier/, "there is no bigger tier to suggest")
+    assert.match(explainExit(137, "standard"), /more than the 4 GB of memory the standard tier has[\s\S]*--tier boosted/)
+    assert.doesNotMatch(explainExit(137, "high"), /--tier/, "there is no bigger tier to suggest")
     assert.equal(explainExit(1, "standard"), null, "a failed test explains itself")
 
     assert.equal(tierOf(undefined), "standard")
@@ -226,4 +227,14 @@ test("colour follows the terminal, and is carried into the container", async () 
     const args = dockerArgs({ cwd: "/p", image: "img", tier: "standard", args: ["test"] })
     const env = args[args.indexOf("--env") + 1]
     assert.match(env, /^(FORCE_COLOR=1|NO_COLOR=1)$/, `passed ${env}`)
+})
+
+test("the tiers are the platform's, and a retired one runs as what replaced it", async () => {
+    const { TIERS, tierOf } = await source("docker")
+    assert.deepEqual(Object.keys(TIERS), ["standard", "boosted", "high"])
+    assert.deepEqual([TIERS.standard.cpus, TIERS.standard.memory], ["0.5", "4g"])
+    assert.deepEqual([TIERS.high.cpus, TIERS.high.memory], ["2", "8g"])
+    assert.equal(tierOf(undefined), "standard")
+    assert.equal(tierOf("max"), "high")
+    assert.throws(() => tierOf("huge"), /Unknown tier "huge"/)
 })

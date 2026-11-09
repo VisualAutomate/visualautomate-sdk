@@ -53,11 +53,29 @@ npm test            # builds both packages, then tests the builds
 npm run pack:check  # what each package would put on npm
 ```
 
-Node 20 or newer: the platform sandbox runs Node 20, and the CLI runs plugin code in its own process.
+Node 20 or newer to run the CLI. Steps run on the platform's Node 24: `vsa dev` and
+`vsa test --docker` use the sandbox image, which has it.
 
-`packages/plugin-sdk/src/platform-rules.ts` holds the packages a plugin may `require` and
-the patterns the platform refuses on upload. It has to match the platform: when those
-rules change there, update this file and release.
+## Keeping in line with the platform
+
+`packages/plugin-sdk/src/platform-rules.ts` holds what the SDK and the CLI must agree
+with the platform about: the packages a step may require and the versions the sandbox
+installs (with its npm overrides), the code the upload refuses and its maximum length,
+the globals the runner hands a step and the ones it blocks, the Node version, the
+machine tiers, the limits on state and signed links, and how the portal's push check
+runs a test (its default `expectOutput` and time limit).
+
+It is generated from checkouts of the platform and the developer portal, never edited
+by hand. Only facts are copied, not code: this repository is public.
+
+```bash
+npm run platform:sync    # expects ../www.visualautomate.com and ../developers.visualautomate.com
+npm run skill:sync       # the skill's generated lists, from the new rules
+npm test
+```
+
+The sandbox image (`visualautomate-sandbox`) takes its package list from the SDK it
+depends on, so release the SDK first, then rebuild the image at the same version.
 
 ## Releasing
 

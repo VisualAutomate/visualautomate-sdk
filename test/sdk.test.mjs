@@ -95,7 +95,16 @@ test("simulate says what a broken plugin did wrong", async () => {
     const slow = await simulate({ execute: () => new Promise(() => {}) }, { timeoutMs: 20 })
     assert.equal(slow.status, "timeout")
 
+    // No account chosen, as on the platform when none is: context.connections is absent.
     const connection = await simulate({ execute: async (i, c, context) => context.connections.get("gmail") })
     assert.equal(connection.status, "error")
-    assert.match(connection.error, /not available locally/)
+    assert.match(connection.error, /reading 'get'/)
+    const guarded = await simulate({
+        execute: async (i, c, context) =>
+            context.connections ? { output: "success", data: {} } : { output: "error", data: { error: "No account" } },
+    })
+    assert.equal(guarded.output.output, "error")
+
+    const media = await simulate({ execute: async (i, c, context) => context.media.run("trim", {}) })
+    assert.match(media.error, /not available locally/)
 })

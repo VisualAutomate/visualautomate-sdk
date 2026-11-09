@@ -85,6 +85,9 @@ export function policyFor(allowedDomains: string[] | undefined, config: unknown)
 }
 
 export function permits(policy: EgressPolicy, host: string): boolean {
+    // Never, whatever the policy says: the platform refuses these before it
+    // looks at the declared domains, a "*" included.
+    if (isAlwaysDenied(host)) return false
     if (policy.wildcard) return true
     return policy.hosts.some((allowed) => host === allowed || host.endsWith(`.${allowed}`))
 }

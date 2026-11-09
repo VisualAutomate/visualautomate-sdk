@@ -1,8 +1,14 @@
 # The sandbox
 
-Code steps run in an isolated sandbox created for the run and destroyed afterwards: **Node.js 20**, with `index.js` loaded as the body of a function given `module`, `exports` and a `require` that hands out only the allowed packages. `vsa dev` and `vsa test --docker` run the same image locally (`ghcr.io/visualautomate/plugin-sandbox`).
+Code steps run in an isolated sandbox created for the run and destroyed afterwards, on <!-- node:start -->**Node.js 24**<!-- node:end -->. The runner compiles `index.js` into a `vm` context of its own, as the body of a function given `module`, `exports` and a `require` that hands out only the allowed packages. `vsa test` loads code exactly that way, and `vsa dev` and `vsa test --docker` also run on the platform's Node version, in the sandbox image (`ghcr.io/visualautomate/plugin-sandbox`).
 
-Available: the JavaScript built-ins, `fetch`, `URL`, `TextEncoder`/`TextDecoder`, `crypto`, `console`, `setTimeout`/`clearTimeout` and `AbortController`.
+A step's context has the language's own objects (`Object`, `Array`, `JSON`, `Math`, `Promise`, `Map`, `Date`, `RegExp`, …) and these globals, nothing more: <!-- provided:start -->`fetch`, `Request`, `Response`, `Headers`, `URL`, `URLSearchParams`, `btoa`, `atob`, `console`, `setTimeout`, `clearTimeout`, `setInterval`, `clearInterval`, `crypto`, `TextEncoder`, `TextDecoder`, `ArrayBuffer`, `Uint8Array`, `Uint16Array`, `Uint32Array`, `Int8Array`, `Int16Array`, `Int32Array`, `Float32Array`, `Float64Array`, `DataView`, `Blob`, `FormData`, `AbortController`, `AbortSignal`<!-- provided:end -->.
+
+These are set to undefined: <!-- blocked:start -->`process`, `global`, `module`, `exports`, `__dirname`, `__filename`, `eval`, `Function`, `child_process`, `fs`, `os`, `cluster`, `dgram`, `dns`, `net`, `http`, `https`, `path`, `readline`, `stream`, `tls`, `zlib`, `buffer`, `Buffer`, `globalThis`, `self`, `window`, `SharedArrayBuffer`, `Atomics`, `WeakRef`, `FinalizationRegistry`, `AsyncFunction`, `GeneratorFunction`, `AsyncGeneratorFunction`, `WebAssembly`<!-- blocked:end -->. Anything else Node has (`structuredClone`, `setImmediate`, `queueMicrotask`, `performance`) is simply not there.
+
+`console` has four methods: `log`, `error`, `warn` and `info`. `console.debug` and `console.table` do not exist.
+
+The code is wrapped on one line with nothing added after it, so **end `index.js` with a newline**: a last line that is a `//` comment with no newline after it comments out the wrapper's closing bracket and the step does not load.
 
 ## Not available
 
@@ -89,10 +95,11 @@ So: no `import` (not even `import type`, or the word "import" followed by a spac
 
 | | Default | Max |
 | --- | --- | --- |
-| `timeoutMs`, one run of the step | 10000 | 60000, and the user's plan |
+| `timeoutMs`, one run of the step | 10000 on a canvas, 30000 in the push check | 60000, and the user's plan |
+| `index.js` | | 100,000 characters |
 | `memoryLimitMb` | 32 | 128 |
 | One state value | | 128 KB |
 | `ttlSeconds` on a state value | at least 60 | |
 | A loop the user puts the step in | | 200 items |
 
-Machine tiers (`vsa dev --tier`): `standard` ¼ vCPU and 1 GB (the default), `boosted` ½ vCPU and 4 GB, `high` 1 vCPU and 6 GB, `max` 2 vCPU and 8 GB.
+Machine tiers (`vsa dev --tier`), the first being the default: <!-- tiers:start -->`standard` 0.5 vCPU and 4 GB, `boosted` 1 vCPU and 6 GB, `high` 2 vCPU and 8 GB<!-- tiers:end -->.

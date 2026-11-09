@@ -21,4 +21,6 @@ Every code example passes the platform's code check, and the ones that need no n
 | `trigger-new-mail/` | trigger | A starting point that polls a mailbox, from now on |
 | `apps/` | apps | Whole apps in the `modules/` shape: GitHub and Slack without code, Gmail and DeepL with declared and code modules side by side. See `apps/README.md` |
 
-Declared steps and triggers have no `index.js` and are tested in the developer portal's editor, not by `vsa test`.
+Declared steps and triggers have no `index.js`: `vsa test` checks their manifests, and the developer portal's editor runs them with **Try it**.
+
+The test files here are what passes **locally**, where there is no account. To publish a step, its test must come back on `success` in a push check: for a step that acts as an account, put the id of one of your connected accounts in `config` (the module's page on the portal lists them) and set `expectOutput` to `success`.

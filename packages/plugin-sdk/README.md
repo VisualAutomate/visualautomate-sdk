@@ -38,10 +38,10 @@ in your manifest. `data` is what the next steps read.
 
 | | |
 |---|---|
-| `storage` | the account's files — `put`, `get`, `delete`, `list`, `head`, `signedUrl`, `download` |
-| `state` | values that outlive one run, scoped to the workflow — `get`, `set`, `delete`, `list` |
+| `storage` | the account's files — `put`, `get`, `delete`, `list`, `head`, `signedUrl`, `shareUrl`, `download` |
+| `state` | values that outlive one run, scoped to the workflow — `get`, `set` (at most 128 KB, `ttlSeconds` at least 60), `delete`, `list` (`{ keys: [{ key, expiresAt }], complete }`) |
 | `media` | ffmpeg, by operation name. Absent when the server has no sandbox configured |
-| `connections` | the accounts this step was configured with. Absent when it declares none |
+| `connections` | the accounts this step was configured with. Absent when it declares none, or none was chosen |
 | `workflowId`, `nodeId`, `userId`, `executionId`, `startedAt`, `secrets` | about the run |
 
 You never see a credential and you never name a host. `connections.get("account")`
@@ -67,12 +67,14 @@ result.files         // what storage holds now
 result.state         // what state holds now
 ```
 
-Storage and state are real, in memory, with the same edge cases the platform's
-have — `get` on a missing key is `null`, `put` takes a string or bytes, `list`
-is prefix-filtered.
+Storage and state are real, in memory, with the same edge cases and limits the
+platform's have — `get` on a missing key is `null`, `put` takes a string or bytes,
+`list` is prefix-filtered, a state value over 128 KB or a `ttlSeconds` under 60 is
+refused, and an expired value reads as `null`.
 
-`connections` and `media` are not simulated. Pass a stub if you want to test the
-code around them:
+`connections` and `media` are not simulated. Without a stub, `context.connections`
+is absent, as on the platform when no account was chosen, and `context.media`
+fails with a sentence saying so. Pass a stub to test the code around them:
 
 ```ts
 await simulate(plugin, {
@@ -104,7 +106,49 @@ check.packages // the allowed packages this code requires
 version the sandbox has installed. Nothing else is available: no `fs`, no
 `http`, and no subpaths like `lodash/get`.
 
-`sandboxRequire(load)` and `loadPluginCode(code, require)` load code the way
-the sandbox does, as the body of a function given `module`, `exports` and a
-`require` that only hands out allowed packages. `visualautomate test` uses
-them; they are here for your own test runner.
+`validatePluginCode` also refuses code over 100,000 characters, as the upload does.
+
+## Loading code the way the runner does
+
+```ts
+import { executeOf, loadPluginCode, sandboxRequire, simulate } from "@visualautomate/plugin-sdk"
+
+const exported = loadPluginCode(code, sandboxRequire((name) => require(name)), {
+    fetch: myGuardedFetch,           // optional: the step's fetch
+    console: { log: (...a) => logs.push(a) },
+})
+const result = await simulate(executeOf(exported), { config })
+```
+
+`loadPluginCode` compiles the code into a `node:vm` context of its own, wrapped
+as the platform's runner wraps it, with the platform's globals (`fetch`, `btoa`,
+`TextEncoder`, `Blob`, `FormData`, the typed arrays …) and no others: `Buffer`,
+`process`, `globalThis`, `structuredClone` and the Node modules are undefined,
+and `console` has `log`, `error`, `warn` and `info`. `executeOf` finds the
+function the runner would call: the export itself, its `execute`, or a `default`
+that is a function.
+
+Objects a step returns belong to its own context, so compare them as JSON rather
+than with a deep-equality that checks prototypes.
+
+## Checking a manifest
+
+```ts
+import { checkManifest } from "@visualautomate/plugin-sdk"
+
+const check = checkManifest(JSON.parse(manifestText), /* has code */ true)
+check.ok        // false when the portal would refuse it
+check.kind      // "code" | "declared" | "outputs-only" | "trigger"
+check.errors    // why it would be refused
+check.warnings  // what it would drop or regret
+```
+
+The SDK's own reading of the rules the portal enforces, for code steps,
+declared steps (`action`), triggers and `optionsFrom`; the portal's word is final.
+
+## The platform's facts
+
+`PLATFORM_NODE_MAJOR`, `PROVIDED_GLOBALS`, `BLOCKED_GLOBAL_NAMES`,
+`SANDBOX_TIERS`, `RETIRED_TIERS`, `STATE_LIMITS`, `SIGNED_URL_SECONDS`,
+`MAX_CODE_LENGTH`, `SANDBOX_OVERRIDES` and `PUSH_CHECK` (the portal's default
+`expectOutput` and time limits) are exported, generated from the platform.

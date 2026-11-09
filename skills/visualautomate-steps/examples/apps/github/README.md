@@ -17,4 +17,4 @@ On the developer portal, the app is:
 | `update-issue` | `PATCH repos/{owner}/{repo}/issues/{number}` | |
 | `comment-on-issue` | `POST repos/{owner}/{repo}/issues/{number}/comments` | |
 
-`errorPath` is `message`: where GitHub puts the reason it refused. Declared modules are tested in the portal's editor with **Try it**, not by `vsa test`.
+`errorPath` is `message`: where GitHub puts the reason it refused. `vsa test` at the app's root checks all four manifests; the portal's editor runs them with **Try it**, which publishing needs.

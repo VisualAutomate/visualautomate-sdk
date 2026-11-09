@@ -9,7 +9,7 @@
  * packages and nothing else — no `fs`, no `http`, not even `path`.
  */
 
-import { ALLOWED_PACKAGES, RESTRICTED_PATTERNS } from "./platform-rules"
+import { ALLOWED_PACKAGES, MAX_CODE_LENGTH, RESTRICTED_PATTERNS } from "./platform-rules"
 
 export { ALLOWED_PACKAGES, RESTRICTED_PATTERNS }
 
@@ -25,6 +25,10 @@ export type CodeCheck = { valid: true; packages: string[] } | { valid: false; er
  * be able to load.
  */
 export function validatePluginCode(code: string): CodeCheck {
+    if (code.length > MAX_CODE_LENGTH) {
+        return { valid: false, error: `Plugin code exceeds maximum length of ${Math.round(MAX_CODE_LENGTH / 1000)}KB.` }
+    }
+
     const hasExecute = code.includes("module.exports") || code.includes("exports.execute") || code.includes("export")
     if (!hasExecute) {
         return {
@@ -89,20 +93,4 @@ export function sandboxRequire(load: (name: string) => unknown): (name: string) 
             )
         }
     }
-}
-
-/**
- * Evaluate a step's code the way the sandbox wraps it: as the body of a function
- * given `module`, `exports` and `require`, in strict mode. Returns what it exported.
- *
- * Not a security boundary — this runs your own code on your own machine. It is
- * here so a file the sandbox cannot load (an `export` statement, a top-level
- * `await`) fails here too, rather than passing a looser loader.
- */
-export function loadPluginCode(code: string, require: (name: string) => unknown): unknown {
-    const module = { exports: {} as unknown }
-    // eslint-disable-next-line no-new-func
-    const body = new Function("module", "exports", "require", `"use strict"; ${code}`)
-    body(module, module.exports, require)
-    return module.exports
 }

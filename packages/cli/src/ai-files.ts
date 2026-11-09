@@ -21,6 +21,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 
+import { PLATFORM_NODE_MAJOR } from "@visualautomate/plugin-sdk"
+
 import { SKILL_FILES } from "./skill-files"
 
 export const SKILL_NAME = "visualautomate-steps"
@@ -51,18 +53,20 @@ Before writing or changing a step, read the full guide: \`.claude/skills/${SKILL
 1. \`index.js\` is CommonJS, loaded as written: \`module.exports = { execute: async (input, config, context) => ... }\`, with \`/** @type {PluginModule} */\` above it.
 2. The word \`import\` may not appear anywhere in \`index.js\`, comments included. Neither may \`eval(\`, \`Function(\`, \`process.env\`, \`globalThis\`, \`Reflect\`, \`Proxy\`, \`constructor\`, \`__proto__\` or \`WebAssembly\`.
 3. \`require\` only allowed npm packages, by bare name and with a string literal. No \`fs\`, \`http\`, \`os\`, \`child_process\` or \`Buffer\`; use \`context.storage\`, \`fetch\` and \`Uint8Array\`.
+   Steps run on Node ${PLATFORM_NODE_MAJOR} in a context with only the platform's globals: no \`process\`, \`globalThis\`, \`structuredClone\` or \`setImmediate\`, and \`console\` has \`log\`, \`error\`, \`warn\` and \`info\` only. End \`index.js\` with a newline.
 4. Never read or hold a credential. A connected account is \`context.connections.get("<connection property>")\` and \`request({ path })\` with a path relative to the provider.
 5. A user's own key is a \`secret\` property; a key the plugin holds is \`context.secrets\`. Nothing secret goes in the repository.
 6. Return \`{ output, data }\`, where \`output\` is one of the manifest's \`outputs\`. Expected failures leave by \`"error"\` with a readable \`data.error\`.
-7. Limits: \`timeoutMs\` at most 60000, \`memoryLimitMb\` at most 128, a state value at most 128 KB.
+7. Limits: \`timeoutMs\` at most 60000 (the push check gives 30000 when the manifest names none), \`memoryLimitMb\` at most 128, a state value at most 128 KB, \`index.js\` at most 100,000 characters.
 
 ## Checking
 
-- \`vsa test\` runs the platform's check on a code step (\`vsa test <module>\` for one module of an app). Fix the code until it passes; never weaken the check.
-- \`context.connections\` and \`context.media\` cannot run locally: the code checks still pass, and the step must leave by \`error\` when no account is chosen.
-- Declared steps and triggers are tested in the developer portal's editor, not by \`vsa test\`.
+- \`vsa test\` is the push check, here (\`vsa test <module>\` for one module of an app): it checks every manifest, and loads and runs every code step the way the platform does. Fix the code until it passes; never weaken the check.
+- A run must leave by the test file's \`expectOutput\`, which is \`success\` when it names none.
+- Locally there is no connected account: \`context.connections\` is absent, so check for it. \`context.media\` only runs on the platform.
+- Declared steps and triggers are checked by \`vsa test\` and run in the developer portal's editor with Try it.
 
-Publishing is done by the developer, from GitHub, on https://developers.visualautomate.com.
+Publishing is done by the developer, from GitHub, on https://developers.visualautomate.com, and needs one push whose test came back on \`success\`. For a step that acts as an account, that means the id of a connected account under \`config\` in visualautomate.test.json (the module's page on the portal lists them).
 `
 }
 

@@ -13,19 +13,21 @@
 
 import { spawnSync } from "node:child_process"
 
+import { RETIRED_TIERS, SANDBOX_TIERS } from "@visualautomate/plugin-sdk"
+
 import { colourEnv, red, yellow } from "./colour"
 
 export const IMAGE = "ghcr.io/visualautomate/plugin-sandbox"
 
-/** The platform's sandbox sizes. */
-export const TIERS = {
-    standard: { cpus: "0.25", memory: "1g" },
-    boosted: { cpus: "0.5", memory: "4g" },
-    high: { cpus: "1", memory: "6g" },
-    max: { cpus: "2", memory: "8g" },
-} as const
+/**
+ * The platform's machine sizes, from its own tier table (see platform-rules.ts
+ * in the SDK, which scripts/sync-platform.mjs writes from the platform).
+ */
+export const TIERS: Record<string, { cpus: string; memory: string; label: string }> = Object.fromEntries(
+    SANDBOX_TIERS.map((tier) => [tier.id, { cpus: String(tier.vcpus), memory: `${tier.memoryGb}g`, label: tier.label }]),
+)
 
-export type TierName = keyof typeof TIERS
+export type TierName = string
 
 export interface DockerRun {
     /** The project folder on this machine. */
@@ -72,8 +74,13 @@ export function forwardedFlags(flags: Record<string, string>): string[] {
 }
 
 export function tierOf(value: string | undefined): TierName {
-    if (!value) return "standard"
-    if (value in TIERS) return value as TierName
+    if (!value) return SANDBOX_TIERS[0].id
+    if (value in TIERS) return value
+    const now = RETIRED_TIERS[value]
+    if (now) {
+        console.error(yellow(`! The ${value} tier is no longer offered; it runs as ${now} (${TIERS[now].cpus} vCPU, ${TIERS[now].memory.replace("g", " GB")}), as on the platform.`))
+        return now
+    }
     throw new Error(`Unknown tier "${value}". Available: ${Object.keys(TIERS).join(", ")}.`)
 }
 
@@ -88,7 +95,7 @@ export function dockerProblem(): string | null {
 /** What an exit code from the container means, when it is not the test's own verdict. */
 export function explainExit(code: number, tier: TierName): string | null {
     if (code === 137) {
-        const next = (Object.keys(TIERS) as TierName[])[(Object.keys(TIERS) as TierName[]).indexOf(tier) + 1]
+        const next = Object.keys(TIERS)[Object.keys(TIERS).indexOf(tier) + 1]
         return red(
             `✗ stopped   the step used more than the ${TIERS[tier].memory.replace("g", " GB")} of memory the ${tier} tier has, `
             + `and the container was killed. On the platform it would stop the same way.`

@@ -16,7 +16,7 @@ import { tmpdir } from "node:os"
 import { join, relative } from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { loadPluginCode, sandboxRequire, simulate, validatePluginCode } from "../packages/plugin-sdk/dist/index.mjs"
+import { checkManifest, loadPluginCode, sandboxRequire, simulate, validatePluginCode } from "../packages/plugin-sdk/dist/index.mjs"
 import { filled, SANDBOX_MD } from "../scripts/sync-skill.mjs"
 
 const SKILL = fileURLToPath(new URL("../skills/visualautomate-steps", import.meta.url))
@@ -123,6 +123,23 @@ test("the examples index lists every example, and nothing else", () => {
     }
 })
 
+test("every example's manifest passes the SDK's manifest check, with no warnings", () => {
+    for (const name of examples) {
+        const check = checkManifest(manifestOf(name), existsSync(join(EXAMPLES, name, "index.js")))
+        assert.deepEqual(check.errors, [], `${name}: ${check.errors.join("; ")}`)
+        assert.deepEqual(check.warnings, [], `${name}: ${check.warnings.join("; ")}`)
+    }
+})
+
+test("vsa test at the root of an app without code checks every module", () => {
+    const dir = scratch()
+    cpSync(join(APPS, "github"), join(dir, "github"), { recursive: true })
+    const run = vsa(join(dir, "github"), ["test"])
+    assert.equal(run.code, 0, run.out)
+    assert.match(run.out, /4 of 4 passed/)
+    assert.equal(run.out.match(/✓ checked/g)?.length, 4)
+})
+
 test("the modules of one app act as the same account", () => {
     for (const app of apps) {
         const accounts = new Set()
@@ -220,12 +237,12 @@ test("the runnable examples pass `vsa test`, as the push check would run them", 
     }
 })
 
-test("an example that acts as an account passes the code checks and stops at the account locally", () => {
+test("an example that acts as an account runs without one, as the push check runs it when no account is named", () => {
     const dir = scratch()
     cpSync(join(EXAMPLES, "connection-account"), join(dir, "connection-account"), { recursive: true })
     const run = vsa(join(dir, "connection-account"), ["test"])
-    assert.doesNotMatch(run.out, /refused/)
-    assert.match(run.out, /context\.connections is not available locally/)
+    assert.equal(run.code, 0, run.out)
+    assert.match(run.out, /does not count for publishing/)
 })
 
 test("the Gmail send-email module builds the message Gmail expects, and refuses cleanly", async () => {
@@ -267,7 +284,9 @@ test("the Gmail send-email module builds the message Gmail expects, and refuses 
         },
     })
     assert.equal(sent.output?.output, "success", JSON.stringify(sent))
-    assert.deepEqual(sent.output.data, { id: "m1", threadId: "t1", to: ["ada@example.com", "alan@example.com"] })
+    // The step runs in a context of its own, so what it returns is that context's
+    // objects; compared as the platform hands them on, as JSON.
+    assert.deepEqual(JSON.parse(JSON.stringify(sent.output.data)), { id: "m1", threadId: "t1", to: ["ada@example.com", "alan@example.com"] })
     assert.equal(asked.method, "POST")
     assert.equal(asked.path, "gmail/v1/users/me/messages/send")
     assert.doesNotMatch(asked.body.raw, /[+/=]/, "raw is base64url without padding")

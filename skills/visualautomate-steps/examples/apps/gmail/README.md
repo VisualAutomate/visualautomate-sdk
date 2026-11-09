@@ -15,4 +15,4 @@ Reading and labelling mail is one request each, so those modules are declared (g
 | `modify-labels` | declared | Archive, mark read, add or remove labels |
 | `send-email` | code | Builds the MIME message with `js-base64` (an allowed package), sends it with `context.connections` |
 
-`send-email` cannot run on your machine, because it acts as a connected account: `vsa test` passes its code checks and then says the account is not available locally. Its test file checks the clean refusal (no recipient), which is also what the platform's push check runs.
+`send-email` acts as a connected account, and there is none on your machine, so its test file checks the clean refusal (no recipient). That passes locally and on push, but **does not count for publishing**, which needs a push test on `success`: before publishing, put your Google account's id in `config.account`, a real recipient (yourself) in `config.to`, and `"expectOutput": "success"`. Every push then sends that mail, so keep it to yourself.

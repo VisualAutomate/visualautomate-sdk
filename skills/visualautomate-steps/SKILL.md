@@ -67,7 +67,7 @@ Start from the closest example. Then:
 
 - `manifest.json`: see `references/manifest.md`. Every field has a `label`; required fields first; `outputFields` describes every key of `data`.
 - `index.js`: see `references/code-steps.md`. CommonJS, `module.exports`, `/** @type {PluginModule} */` above it.
-- `visualautomate.test.json`: see `references/test-and-publish.md`. A realistic `config` and `input`, and the `expectOutput` the run must leave by.
+- `visualautomate.test.json`: see `references/test-and-publish.md`. A realistic `config` and `input` that reach `success` on the platform: publishing needs one push whose test comes back on `success`. For an account property, that means the id of a connected account in `config` (ask the user).
 
 ### 5. Check it
 
@@ -78,16 +78,21 @@ vsa test              # in the plugin's folder, or at an app's root (every modul
 vsa test send-message # one module of an app
 ```
 
-If `vsa` is not installed: `npm install -g @visualautomate/cli` (Node 20+). With Docker available, `vsa test --docker` runs inside the real sandbox image.
+`vsa test` judges as the push check does: the manifest is checked, the code is loaded the way the platform's runner loads it (its globals and no others, a four-method console), the run gets manifest.json's `timeoutMs`, and it must leave by `expectOutput`, which is `success` when the test file names none.
+
+If `vsa` is not installed: `npm install -g @visualautomate/cli` (Node 20+ for the CLI). With Docker available, `vsa test --docker` runs inside the real sandbox image on the platform's Node 24.
 
 What a red result can mean, and what to do:
 
 - **refused**: the code breaks a rule below. Fix the code, never the check.
 - **`"x" is available in the sandbox but not installed here`**: an allowed package is missing locally. Run the `npm install --save-dev` line it prints (it is only for local runs), or skip the local run and say so.
-- **`context.connections is not available locally`** (or `context.media`): expected for a step that acts as an account or uses ffmpeg. The code checks before it passed. On the platform the push check runs the step without an account, so make sure that path leaves by `error`, and set `"expectOutput": "error"`.
+- **`✗ manifest`**: the manifest breaks a rule the portal enforces. Fix the manifest.
+- **`Cannot read properties of undefined (reading 'get')`**: the step uses `context.connections` without checking it. Locally there is no account, as on the platform when none is chosen: check for it and leave by `error` with a sentence. To prove the step works, name an account in the test file's `config` for the push check.
+- **`… is not defined` / `undefined`** for `Buffer`, `process`, `structuredClone` and the like: the platform does not have them either. See `references/sandbox.md`.
+- **`context.media is not available locally`**: expected for a step that uses ffmpeg; it runs on the platform.
 - **a network failure**: the API needs the user's key or a host this machine cannot reach. Make sure the step fails cleanly by its `error` port, and say what you could not verify.
 
-A **declared step or trigger** is not run by `vsa test` or by the check on push: the platform tests it in the developer portal's editor, where the user picks an account to test with. So check it by hand against the rules below and `references/declared-steps.md`, make sure the JSON parses, and tell the user to press **Try it** in the portal editor.
+A **declared step or trigger** is checked by `vsa test` (`✓ checked … the manifest is sound`) but not run, here or by the push check: the platform runs it in the developer portal's editor, where the user picks an account. Fix every `✗ manifest` line, read the warnings, check the request against the API's documentation, and tell the user to press **Try it** in the portal editor: publishing a declared step needs a passing Try it on its saved version.
 
 ### 6. Hand over
 
@@ -96,7 +101,8 @@ Tell the user, briefly:
 - what you built and which kind of step it is;
 - the files, and what each field and output is;
 - what `vsa test` said (or what you could not test, and why);
-- the next steps: push to GitHub; on https://developers.visualautomate.com create the plugin or app (and module), import the repository under **GitHub repository**, wait for the commit's check to pass, then publish. Private steps are usable at once; public ones are reviewed first.
+- the next steps: push to GitHub; on https://developers.visualautomate.com create the plugin or app (and module), import the repository under **GitHub repository**, wait for the commit's check to pass **on success**, then publish. Private steps are usable at once; public ones are reviewed first.
+- if an account property has no account named in the test file: that the user must add one (the module's page lists the ids) before the step can be published.
 
 ## Hard rules
 
@@ -110,7 +116,9 @@ These are enforced by the platform. Breaking one means the step is refused or fa
 6. **No secrets in code or in the repository.** A user's own key is a `secret` property; a key the plugin itself uses on everybody's behalf comes from `context.secrets`.
 7. **Return `{ output, data }`** where `output` is one of the manifest's `outputs`. Expected failures go out by `"error"` with a readable `data.error`; do not throw for them.
 8. **A trigger never waits in code.** It is a `trigger` block; the platform polls. Use `"initial": "now"` on its cursor unless starting from the past is the point.
-9. **Stay inside the limits**: `timeoutMs` at most 60000 (default 10000), `memoryLimitMb` at most 128 (default 32), state values at most 128 KB each.
+9. **Stay inside the limits**: `timeoutMs` at most 60000 (default 10000 on a canvas, 30000 in the push check), `memoryLimitMb` at most 128 (default 32), state values at most 128 KB each with `ttlSeconds` at least 60, `index.js` at most 100,000 characters.
+10. **Only the platform's globals.** No `Buffer`, `process`, `globalThis`, `structuredClone`, `setImmediate`; `console` has `log`, `error`, `warn` and `info` only. End `index.js` with a newline.
+11. **Export what the runner accepts**: `module.exports = { execute }`, `module.exports.execute = fn`, or a function. A `default` that is an object is not found.
 
 ## What makes a good step
 

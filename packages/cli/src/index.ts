@@ -28,7 +28,16 @@ import { createRequire } from "node:module"
 import { homedir } from "node:os"
 
 import { build, stop as stopBundler } from "esbuild"
-import { loadPluginCode, sandboxRequire, simulate, validatePluginCode } from "@visualautomate/plugin-sdk"
+import {
+    checkManifest,
+    executeOf,
+    loadPluginCode,
+    PLATFORM_NODE_MAJOR,
+    PUSH_CHECK,
+    sandboxRequire,
+    simulate,
+    validatePluginCode,
+} from "@visualautomate/plugin-sdk"
 import { TYPE_DECLARATIONS } from "./declarations"
 import { AGENTS_FILE, CLAUDE_FILE, ensureAgentFiles, foreignAgentFiles, installSkill, SKILL_NAME, skillFileCount } from "./ai-files"
 import { ensureRepoTypes, JSCONFIG_FILE, projectRoot, TYPES_FILE } from "./repo-types"
@@ -47,7 +56,7 @@ import { findTargets, readTestFile, targetForPath, TEST_FILES, type Target } fro
 import { toSandboxModule } from "./sandbox-module"
 import { guardFetch, policyFor } from "./egress"
 import { loadPersisted, persistEnabled, savePersisted } from "./persist"
-import { IMAGE, ensureDocker, forwardedFlags, pullImage, runInDocker, tierOf, type DockerRun } from "./docker"
+import { IMAGE, TIERS, ensureDocker, forwardedFlags, pullImage, runInDocker, tierOf, type DockerRun } from "./docker"
 import { bold, dim, green, red, yellow } from "./colour"
 
 /** Set by build.mjs from package.json. */
@@ -238,7 +247,8 @@ async function bundlePlugin(entry: string): Promise<string> {
             write: false,
             platform: "node",
             format: "esm",
-            target: "node18",
+            // The Node the platform runs steps on.
+            target: `node${PLATFORM_NODE_MAJOR}`,
             packages: "external",
             logLevel: "silent",
         })
@@ -251,6 +261,7 @@ async function bundlePlugin(entry: string): Promise<string> {
 
 /** The code the platform would receive for a target: index.js as written, or the bundle. */
 async function codeFor(target: Target): Promise<string> {
+    if (target.entry === null) throw new Error(`${target.name} is only a manifest; there is no code to run.`)
     return target.raw ? readFile(target.entry, "utf8") : bundlePlugin(target.entry)
 }
 
@@ -264,10 +275,12 @@ function line(indent: boolean, text: string): void {
 /**
  * Run one target the way the platform would, and say whether it passed.
  *
- * In order: the code is checked with the platform's upload rules, loaded with
- * the sandbox's `require`, and run with the settings from its test file. It
- * passes when the run succeeds and, if the test file names an `expectOutput`,
- * leaves by that port — the same verdict the GitHub check gives.
+ * As the developer portal's check on a push does it, in order: the manifest is
+ * checked; a step that is only a manifest (a declared step or a trigger) stops
+ * there, because the platform tests those in the portal's editor; the code is
+ * checked with the upload's rules, loaded the way the runner loads it, and run
+ * for as long as manifest.json allows. It passes when the run succeeds and
+ * leaves by the test file's `expectOutput`, or by `success` when it names none.
  *
  * Never throws: `dev` has to keep going after a broken save.
  */
@@ -276,6 +289,32 @@ async function runTarget(target: Target, flags: Flags, several: boolean): Promis
     if (several) ok(`\n${bold(`▸ ${target.name}`)}`)
 
     try {
+        const manifestPath = join(target.dir, "manifest.json")
+        if (!existsSync(manifestPath)) {
+            say(`${red("✗ refused")}   There is no manifest.json beside the code. The push check refuses a step without one.`)
+            return false
+        }
+        let manifest: Record<string, unknown>
+        try {
+            manifest = parseJsonc(await readFile(manifestPath, "utf8")).value as Record<string, unknown>
+        } catch (error) {
+            say(red(`✗ manifest.json is not valid JSON: ${error instanceof Error ? error.message : String(error)}`))
+            return false
+        }
+
+        const shape = checkManifest(manifest, target.entry !== null)
+        for (const problem of shape.errors) say(`${red("✗ manifest")}  ${problem}`)
+        for (const warning of shape.warnings) say(yellow(`! ${warning}`))
+        if (!shape.ok) return false
+
+        if (target.entry === null) {
+            const what =
+                shape.kind === "trigger" ? "a trigger" : shape.kind === "outputs-only" ? "a declared step with no request" : "a declared step"
+            say(`${green(bold("✓ checked"))}  ${dim(`${what}: the manifest is sound`)}`)
+            say(dim("           Not run here, nor by the push check: press Try it in the developer portal's editor, with an account if it acts as one."))
+            return true
+        }
+
         const code = await codeFor(target)
 
         const check = validatePluginCode(code)
@@ -287,65 +326,74 @@ async function runTarget(target: Target, flags: Flags, several: boolean): Promis
         const settings = await readTestFile(target.dir, flags.input)
         if (!settings.path) say("No visualautomate.test.json — running with empty input and config.")
 
-        const exported = loadPluginCode(code, sandboxRequire(packageLoader(target.dir))) as
-            | ((...args: unknown[]) => unknown)
-            | { execute?: unknown; default?: unknown }
-        const plugin =
-            typeof exported === "function"
-                ? exported
-                : typeof exported?.execute === "function"
-                    ? exported
-                    : (exported?.default as never)
-
-        let outputs: string[] = []
-        const manifestPath = join(target.dir, "manifest.json")
-        if (existsSync(manifestPath)) {
-            try {
-                const manifest = parseJsonc(await readFile(manifestPath, "utf8")).value as { outputs?: string[] }
-                outputs = manifest.outputs ?? []
-            } catch (error) {
-                say(red(`✗ manifest.json is not valid JSON: ${error instanceof Error ? error.message : String(error)}`))
-                return false
-            }
+        // The push check gives a step manifest.json's timeoutMs, capped, and does not
+        // read the test file's. So that is what it gets here too.
+        const declaredTimeout = Number(manifest.timeoutMs)
+        const timeoutMs =
+            Number.isFinite(declaredTimeout) && declaredTimeout > 0
+                ? Math.min(declaredTimeout, PUSH_CHECK.maxTimeoutMs)
+                : PUSH_CHECK.defaultTimeoutMs
+        if (settings.timeoutMs !== undefined && settings.timeoutMs !== timeoutMs) {
+            say(yellow(`! The push check does not read timeoutMs from the test file; it gives this step ${timeoutMs} ms, from manifest.json. Set it there.`))
         }
+
+        const outputs = Array.isArray(manifest.outputs) ? (manifest.outputs as string[]) : ["success", "error"]
+        const expected = settings.expectOutput ?? PUSH_CHECK.defaultExpectOutput
+
+        // Account properties: the push check acts as an account only when the test
+        // file names it, and here there is no account at all.
+        const properties = (manifest.properties ?? {}) as Record<string, { type?: unknown }>
+        const accountProperties = Object.keys(properties).filter((name) => properties[name]?.type === "connection")
+        const config = (settings.config ?? {}) as Record<string, unknown>
+        const named = accountProperties.filter((name) => typeof config[name] === "string" && String(config[name]).trim())
+        const unnamed = accountProperties.filter((name) => !named.includes(name))
 
         const persist = persistEnabled(target.dir, flags.persist)
         const kept = persist ? await loadPersisted(target.dir) : { storage: {}, state: {} }
 
         const policy = policyFor(settings.allowedDomains, settings.config)
         const denied = new Map<string, boolean>()
-        const baseFetch = globalThis.fetch
-        globalThis.fetch = guardFetch(policy, baseFetch, (host, enforced) => denied.set(host, enforced))
+        const logs: string[] = []
+        const capture = (level: string) => (...args: unknown[]) =>
+            logs.push(`${level === "log" ? "" : `[${level}] `}${args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" ")}`)
 
-        let result: Awaited<ReturnType<typeof simulate>>
-        try {
-            result = await simulate(plugin as never, {
-                input: settings.input,
-                config: settings.config,
-                storage: { ...settings.storage, ...kept.storage },
-                state: { ...settings.state, ...kept.state },
-                secrets: settings.secrets,
-                timeoutMs: settings.timeoutMs,
-            })
-        } finally {
-            globalThis.fetch = baseFetch
+        // Loaded as the runner loads it: in a context of its own, with the
+        // platform's globals and no others, the guarded fetch, and its console.
+        const exported = loadPluginCode(code, sandboxRequire(packageLoader(target.dir)), {
+            fetch: guardFetch(policy, globalThis.fetch, (host, enforced) => denied.set(host, enforced)),
+            console: { log: capture("log"), error: capture("error"), warn: capture("warn"), info: capture("info") },
+            timeoutMs,
+        })
+        const execute = executeOf(exported)
+        if (!execute) {
+            say(`${red("✗ failed")}   Plugin must export an execute function: module.exports = { execute }, or a function.`)
+            return false
         }
 
+        const result = await simulate(execute as never, {
+            input: settings.input,
+            config: settings.config,
+            storage: { ...settings.storage, ...kept.storage },
+            state: { ...settings.state, ...kept.state },
+            secrets: settings.secrets,
+            timeoutMs,
+        })
+
         const port = result.output?.output ?? null
-        const expected = settings.expectOutput
-        const passed = result.status === "success" && (!expected || port === expected)
+        const passed = result.status === "success" && port === expected
 
         const verdict = passed ? green(bold("✓ passed")) : red(bold("✗ failed"))
         say(`${verdict}  ${dim(`${result.status}, ${result.durationMs}ms`)}`)
         if (result.error) say(`${dim("error")}    ${red(result.error)}`)
         if (result.output) {
-            const port_ = passed || !expected ? port : red(String(port))
-            say(`${dim("output")}   ${port_}${expected ? dim(` (expected ${expected})`) : ""}`)
+            const shown = passed ? port : red(String(port))
+            const why = settings.expectOutput === undefined ? "expected success, the default" : `expected ${expected}`
+            say(`${dim("output")}   ${shown}${dim(` (${why})`)}`)
             say(`${dim("data")}     ${JSON.stringify(result.output.data, null, 2).replace(/\n/g, "\n         ")}`)
         }
         if (result.files.size > 0) say(`${dim("files")}    ${[...result.files.keys()].join(", ")}`)
         if (result.state.size > 0) say(`${dim("state")}    ${JSON.stringify(Object.fromEntries(result.state))}`)
-        for (const entry of result.logs ?? []) say(`${dim("log")}      ${entry}`)
+        for (const entry of [...logs, ...(result.logs ?? [])]) say(`${dim("log")}      ${entry}`)
 
         for (const [host, enforced] of denied) {
             say(
@@ -354,6 +402,20 @@ async function runTarget(target: Target, flags: Flags, several: boolean): Promis
                     : yellow(`! egress ${host} is not allowed on the platform unless the plugin declares it. `)
                         + `Add "allowedDomains": ["${host}"] to the test file to check with the same rule.`,
             )
+        }
+
+        if (named.length > 0) {
+            say(dim(`account  the test file names an account for ${named.join(", ")}. The push check acts as it; here there is none, so the step ran without it.`))
+        }
+        if (unnamed.length > 0 && expected === "success") {
+            say(yellow(
+                `! ${unnamed.join(", ")} ${unnamed.length > 1 ? "are account properties" : "is an account property"} the test file names no account for. `
+                + `The push check then runs without an account, and publishing needs a run that comes back on success. `
+                + `Put the id of one of your connected accounts under config (the module's page on the portal lists them).`,
+            ))
+        }
+        if (passed && expected !== "success") {
+            say(dim("note     a pass that is not on success does not count for publishing: that needs one push whose test comes back on success."))
         }
 
         if (persist) {
@@ -365,7 +427,7 @@ async function runTarget(target: Target, flags: Flags, several: boolean): Promis
         // A port the manifest does not declare is a step whose line goes nowhere on
         // the canvas — it runs, it succeeds, and the workflow stops there. Worth
         // saying here, where it is one line to fix.
-        if (port && outputs.length > 0 && !outputs.includes(port)) {
+        if (port && !outputs.includes(port)) {
             say(
                 yellow(
                     `! This returned output "${port}", which manifest.json does not list `
@@ -375,13 +437,30 @@ async function runTarget(target: Target, flags: Flags, several: boolean): Promis
         }
         return passed
     } catch (error) {
-        say(red(`✗ ${error instanceof Error ? error.message : String(error)}`))
+        const message = error && typeof error === "object" && "message" in error ? String((error as { message: unknown }).message) : String(error)
+        say(red(`✗ ${message}`))
         return false
+    }
+}
+
+let nodeNoted = false
+
+/**
+ * Say once when this machine's Node is not the platform's. Inside the sandbox
+ * image it always is, so there is nothing to say there.
+ */
+function noteNodeVersion(): void {
+    if (nodeNoted || process.env.VISUALAUTOMATE_PACKAGES) return
+    nodeNoted = true
+    const here = Number(process.versions.node.split(".")[0])
+    if (here !== PLATFORM_NODE_MAJOR) {
+        ok(dim(`Node ${process.versions.node} here; the platform runs steps on Node ${PLATFORM_NODE_MAJOR}. \`vsa dev\` and \`vsa test --docker\` run on that version.`))
     }
 }
 
 /** Every target, one after another. True when all of them passed. */
 async function runTargets(targets: Target[], flags: Flags): Promise<boolean> {
+    noteNodeVersion()
     let passed = 0
     for (const target of targets) {
         if (await runTarget(target, flags, targets.length > 1)) passed++
@@ -756,7 +835,7 @@ Options for \`skill\`:
 
 Options for \`dev\` and \`test\`:
   --module <name>      the same as naming it: vsa dev send-message
-  --tier <name>        the sandbox's size: standard, boosted, high or max
+  --tier <name>        the sandbox's size: ${Object.keys(TIERS).join(", ")}
   --image <ref>        a different sandbox image
   --persist            keep storage and state in .visualautomate/ between runs
   --local              \`dev\` without the sandbox, on this machine's Node

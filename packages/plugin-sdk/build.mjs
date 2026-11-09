@@ -16,6 +16,8 @@ const shared = {
     entryPoints: ["src/index.ts"],
     bundle: true,
     platform: "neutral",
+    // The runtime loads a step's code with node:vm, as the platform's runner does.
+    external: ["node:*"],
     target: "es2022",
     sourcemap: true,
 }

@@ -108,8 +108,14 @@ comments, the examples underneath and your own formatting stay as they are.
 
 ## `test`
 
-Runs your plugin the way the platform would, in three steps:
+The developer portal's check on a push, run here. In order:
 
+0. **The manifest.** The rules the portal is known to refuse, and warnings for
+   what it would drop: an `auth` that names a host, an `action` with both a
+   connection and a `baseUrl`, a request path that is a full URL, a trigger
+   without `items` or without `"initial": "now"`. A declared step (an `action`
+   block) or a trigger stops here, checked: the platform does not run those on a
+   push either, but in the portal's editor with Try it.
 1. **The platform's code checks.** The same rules the upload applies: only
    allowed packages in `require`, no dynamic `require`, none of the refused
    patterns (`eval`, `process.env`, `import`, …). Code that fails here would be
@@ -118,19 +124,35 @@ Runs your plugin the way the platform would, in three steps:
    else — no `fs`, no `http`. Those packages are installed in the sandbox; here
    they come from your project, and a missing one prints the `npm install`
    command for the version the sandbox has.
-3. **A context that behaves.** `storage` and `state` are real, in memory, and
+3. **The runner's way of loading code.** In a `vm` context of its own, with the
+   platform's globals and no others: `fetch`, `btoa`, `TextEncoder`, `Blob`,
+   `FormData` and the rest, but no `Buffer`, `process`, `globalThis` or
+   `structuredClone`, and a `console` with `log`, `error`, `warn` and `info`. A
+   step that leans on something Node has and the platform does not fails here.
+4. **A context that behaves.** `storage` and `state` are real, in memory, with
+   the store's limits (a value at most 128 KB, `ttlSeconds` at least 60), and
    the result shows what the step left behind:
 
 ```
 ✓ passed  success, 3ms
-output   success (expected success)
+output   success (expected success, the default)
 data     { "path": "notes/hello-shouted.txt", "size": 17 }
 files    notes/hello.txt, notes/hello-shouted.txt
 state    {"runs":1}
 ```
 
-A run passes when it succeeds and, if the test file names an `expectOutput`,
-leaves by that port — the same verdict as the GitHub check.
+A run passes when it succeeds and leaves by the test file's `expectOutput`, or by
+`success` when it names none, within manifest.json's `timeoutMs` (30 seconds when
+it names none): the same verdict as the GitHub check.
+
+**Publishing needs a run on success.** The portal publishes only code whose push
+test came back on `success`. A test that expects `error` passes, and `vsa test`
+says it does not count. For a step that acts as an account, name one of your
+connected accounts in the test file's `config`, under the property's name: the
+push check then acts as it. The module's page on the portal lists the ids.
+
+`vsa test` runs on this machine's Node and says so when that is not the
+platform's (Node 24); `vsa test --docker` and `vsa dev` run on the platform's.
 
 The verdict is green when it passed and red when it did not, in the sandbox as
 well as out here. `NO_COLOR` turns that off, and output that is not a terminal —
@@ -177,8 +199,9 @@ runs them all. Ctrl+C stops it.
 
 `context.connections` and `context.media` are **not** simulated. One is
 somebody's OAuth account and the other is an ffmpeg container; pretending to be
-either would produce a plugin that passes here and fails on a canvas. Asking for
-one fails with a sentence saying so.
+either would produce a plugin that passes here and fails on a canvas. There is
+no account here, so `context.connections` is absent, as it is on the platform
+when no account is chosen; `context.media` fails with a sentence saying so.
 
 `visualautomate.test.json` (or `test.json`, or `--input <file>`) seeds the run:
 
@@ -189,14 +212,14 @@ one fails with a sentence saying so.
   "storage": { "notes/hello.txt": "hello from a file" },
   "state": { "runs": 0 },
   "expectOutput": "success",
-  "timeoutMs": 30000,
   "allowedDomains": ["api.example.com"]
 }
 ```
 
-The platform's push check reads `config`, `input`, `expectOutput` and
-`timeoutMs`; `storage`, `state`, `secrets` and `allowedDomains` are for running
-locally. A file that is not valid JSON stops the run rather than running with
+The platform's push check reads `config`, `input` and `expectOutput`; `storage`,
+`state`, `secrets` and `allowedDomains` are for running locally. The time limit
+is manifest.json's `timeoutMs`, not the test file's: `vsa test` warns about a
+`timeoutMs` here, because the push check ignores it. A file that is not valid JSON stops the run rather than running with
 nothing.
 
 ## Where `fetch` may go
@@ -236,10 +259,11 @@ vsa dev --tier boosted
 Your plugin runs inside the plugin sandbox image,
 `ghcr.io/visualautomate/plugin-sandbox`, at the version of this CLI:
 
-- the Node version the platform runs plugins on, with every allowed npm
-  package installed — no `npm install` needed;
-- the CPU and memory of the sandbox tier: `standard` (¼ vCPU, 1 GB, the
-  default), `boosted` (½ vCPU, 4 GB), `high` (1 vCPU, 6 GB), `max` (2 vCPU, 8 GB);
+- Node 24, the version the platform runs plugins on, with every allowed npm
+  package installed at the platform's versions — no `npm install` needed;
+- the CPU and memory of the platform's machine: `standard` (½ vCPU, 4 GB, the
+  default), `boosted` (1 vCPU, 6 GB) or `high` (2 vCPU, 8 GB). `max` is no longer
+  offered and runs as `high`, as on the platform;
 - no Linux capabilities, a read-only filesystem apart from your project and a
   small `/tmp`, and nothing else from your machine.
 
@@ -256,8 +280,10 @@ machine, and each run starts a fresh container.
 
 Not from here. Connect the repository to your app on the portal, push your
 commit, and the platform runs the same checks `vsa test` runs against every
-module it touched. Publish on the portal takes the code from a commit that
-passed, and a version snapshot is saved so you can roll back.
+module it touched. Publish on the portal takes the code from a commit whose test
+came back on `success`, and a version snapshot is saved so you can roll back. A
+declared step is published once a Try it in the portal's editor has passed on
+its saved version.
 
 Comments in `manifest.json` are a convenience of this tool: the file on your
 disk may have them, and they are stripped before the manifest is read.
