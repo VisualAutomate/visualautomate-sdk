@@ -54,8 +54,9 @@ Say which you chose and why in one line when you hand over.
 | --- | --- |
 | One step that stands alone (a **plugin**) | `manifest.json`, `index.js`, `visualautomate.test.json` at the repository root |
 | Several steps for one service (an **app** with **modules**) | `modules/<module-slug>/` with those three files in each folder. The app itself has no code |
+| A **declared** module (an `action` block, no code) | Not published from GitHub. It is created on the developer portal (**New module → Call an API**), with its `manifest.json` pasted into the module's manifest editor. Write it as `modules/<slug>/manifest.json` all the same, check it with `vsa test`, and tell the user to paste it |
 
-A declared step or a trigger has no `index.js`. Module folder names are short kebab-case slugs: `send-message`, `list-invoices`.
+A push publishes only modules with an `index.js` that passes the push check; a declared module or a manifest-only trigger in the repository is checked by the portal and skipped. Module folder names are short kebab-case slugs: `send-message`, `list-invoices`.
 
 In an app, decide per module: the reads and simple writes are usually declared, and only the modules that need more are code (see `examples/apps/gmail`, where sending needs code and the rest does not). Every module that acts as the account declares the same `connection` property (`account`) with the same provider and `auth`; the app's name, logo and connection are set on the portal, not in the repository.
 
@@ -92,7 +93,7 @@ What a red result can mean, and what to do:
 - **`context.media is not available locally`**: expected for a step that uses ffmpeg; it runs on the platform.
 - **a network failure**: the API needs the user's key or a host this machine cannot reach. Make sure the step fails cleanly by its `error` port, and say what you could not verify.
 
-A **declared step or trigger** is checked by `vsa test` (`✓ checked … the manifest is sound`) but not run, here or by the push check: the platform runs it in the developer portal's editor, where the user picks an account. Fix every `✗ manifest` line, read the warnings, check the request against the API's documentation, and tell the user to press **Try it** in the portal editor: publishing a declared step needs a passing Try it on its saved version.
+A **declared step** is checked by `vsa test` (`✓ checked … the manifest is sound`) but not run, here or by the push check. Fix every `✗ manifest` line, read the warnings, and check the request against the API's documentation. Then it goes to the developer portal: **New module → Call an API**, paste the `manifest.json` into the module's manifest editor (the form above it edits the same file), press **Try it** with an account, and publish there. Publishing needs a Try it that came back on `success`, on the saved version.
 
 ### 6. Hand over
 
@@ -101,7 +102,8 @@ Tell the user, briefly:
 - what you built and which kind of step it is;
 - the files, and what each field and output is;
 - what `vsa test` said (or what you could not test, and why);
-- the next steps: push to GitHub; on https://developers.visualautomate.com create the plugin or app (and module), import the repository under **GitHub repository**, wait for the commit's check to pass **on success**, then publish. Private steps are usable at once; public ones are reviewed first.
+- the next steps, for code modules: push to GitHub; on https://developers.visualautomate.com create the plugin or app (and a **Write code** module), import the repository under **GitHub repository**, wait for the commit's check to pass **on success**, then publish. Private steps are usable at once; public ones are reviewed first.
+- for declared modules: on the portal, **New module → Call an API**, paste the `manifest.json`, **Try it**, publish. They are never published from GitHub.
 - if an account property has no account named in the test file: that the user must add one (the module's page lists the ids) before the step can be published.
 
 ## Hard rules

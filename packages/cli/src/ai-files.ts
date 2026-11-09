@@ -45,7 +45,7 @@ Before writing or changing a step, read the full guide: \`.claude/skills/${SKILL
 
 - A plugin: \`manifest.json\`, \`index.js\` and \`visualautomate.test.json\` at the root.
 - An app: one folder per module under \`modules/<slug>/\`, each with those three files.
-- A step that is one HTTP request (an \`action\` block in the manifest) or a trigger (a \`trigger\` block) has no \`index.js\`.
+- A step that is one HTTP request (an \`action\` block in the manifest) has no \`index.js\`, and is not published from GitHub: it is created on the developer portal as New module → Call an API, with its manifest.json pasted into the module's editor. Keep a copy here and check it with \`vsa test\`.
 - A \`plugin.ts\` made by \`vsa init\` is a local playground; the files above are what gets published.
 
 ## Rules the platform enforces
@@ -64,7 +64,7 @@ Before writing or changing a step, read the full guide: \`.claude/skills/${SKILL
 - \`vsa test\` is the push check, here (\`vsa test <module>\` for one module of an app): it checks every manifest, and loads and runs every code step the way the platform does. Fix the code until it passes; never weaken the check.
 - A run must leave by the test file's \`expectOutput\`, which is \`success\` when it names none.
 - Locally there is no connected account: \`context.connections\` is absent, so check for it. \`context.media\` only runs on the platform.
-- Declared steps and triggers are checked by \`vsa test\` and run in the developer portal's editor with Try it.
+- Declared steps are checked by \`vsa test\`, then pasted into the portal, run with Try it, and published there.
 
 Publishing is done by the developer, from GitHub, on https://developers.visualautomate.com, and needs one push whose test came back on \`success\`. For a step that acts as an account, that means the id of a connected account under \`config\` in visualautomate.test.json (the module's page on the portal lists them).
 `

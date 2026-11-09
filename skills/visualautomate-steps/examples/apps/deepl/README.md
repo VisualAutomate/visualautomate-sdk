@@ -15,6 +15,8 @@ DeepL is reached with a key the user pastes, not an account the platform connect
 | `usage` | declared | |
 | `translate-long-text` | code | One request takes at most 50 texts, so a long document is several requests stitched back together in order |
 
+The declared modules are created on the portal (**New module → Call an API**, paste the manifest, Try it with your key). `translate-long-text` is published from the repository; its push test needs a key, which belongs in `context.secrets` set for the plugin, never in a committed test file.
+
 Optional body fields are left out on purpose: a declared body sends a blank field as `""`, which DeepL refuses. Empty `query` values are dropped, body values are not.
 
 `translate-long-text` runs on your machine without a key: its test checks the refusal when no key is filled in. With a real key, add `"apiKey"` to `config` and `"allowedDomains": ["api-free.deepl.com"]` locally, and never commit the key.

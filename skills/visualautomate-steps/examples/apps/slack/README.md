@@ -1,6 +1,6 @@
 # Slack: an app without code, and a 200 that is a failure
 
-Four declared modules, generated from the platform's catalogue.
+Four declared modules, generated from the platform's catalogue. Like every declared module, each is created on the portal (**New module → Call an API**, paste its `manifest.json`, **Try it**) and published there, not from GitHub.
 
 | | |
 | --- | --- |

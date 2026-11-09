@@ -115,7 +115,8 @@ The developer portal's check on a push, run here. In order:
    connection and a `baseUrl`, a request path that is a full URL, a trigger
    without `items` or without `"initial": "now"`. A declared step (an `action`
    block) or a trigger stops here, checked: the platform does not run those on a
-   push either, but in the portal's editor with Try it.
+   push either. A declared step is published from the portal, not GitHub: New
+   module → Call an API, paste its manifest.json, Try it, publish.
 1. **The platform's code checks.** The same rules the upload applies: only
    allowed packages in `require`, no dynamic `require`, none of the refused
    patterns (`eval`, `process.env`, `import`, …). Code that fails here would be

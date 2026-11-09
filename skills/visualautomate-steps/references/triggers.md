@@ -2,7 +2,7 @@
 
 A trigger starts a workflow for each new item somewhere: a mail, a row, an order. It is **never code that waits**: a sandbox bills by the second. It is a `trigger` block in the manifest; the platform's scheduler polls the provider without starting a machine, and starts one run per new item, with the item as the step's output. A trigger has no `index.js`, `inputs: []`, and usually `outputs: ["success"]`.
 
-Like a declared step, `vsa test` checks it (and warns when `"initial": "now"` is missing) but does not run it; it is tested in the developer portal's editor.
+`vsa test` checks it (and warns when `"initial": "now"` is missing) but does not run it. A push publishes only modules with an `index.js` that passes the push check, so a manifest-only trigger cannot be published from GitHub. Ask the user how their app is meant to add one before building it.
 
 ## Example: Outlook's "New email", as it ships
 
