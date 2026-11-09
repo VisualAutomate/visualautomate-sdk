@@ -1,0 +1,28 @@
+{
+  "description": "Saves a report and returns a link to it",
+  "icon": "file",
+  "properties": {
+    "folder": {
+      "label": "Folder",
+      "type": "string",
+      "default": "reports"
+    },
+    "sourceUrl": {
+      "label": "Also download from",
+      "type": "string",
+      "description": "Optional URL to store beside it"
+    }
+  },
+  "inputs": [
+    "input"
+  ],
+  "outputs": [
+    "success",
+    "error"
+  ],
+  "outputFields": {
+    "path": "Where the report was saved",
+    "link": "A link valid for an hour",
+    "files": "What is in the folder now"
+  }
+}

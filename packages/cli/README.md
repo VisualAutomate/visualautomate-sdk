@@ -30,6 +30,7 @@ plugin.json          name, version, description, category
 test.json            the input, config, storage and state `test` runs with
 visualautomate.d.ts  the types, written in rather than installed
 tsconfig.json        so your editor type-checks it
+AGENTS.md, CLAUDE.md the platform's rules, for an AI assistant working here
 ```
 
 Templates: `blank`, `http-request`, `connection`, `file`. Pass one with
@@ -57,6 +58,26 @@ repository they go at the root, where they cover every module. Nothing is
 installed, nothing of it exists while your plugin runs, and a file you wrote
 yourself is never written over — delete ours and it comes back.
 
+## `skill`
+
+The guide an AI assistant reads to build steps for you: describe a step in a sentence ("a step that
+creates an invoice in Moneybird") and the assistant writes the manifest, the code and the test file,
+runs `vsa test`, and tells you how to publish it.
+
+```bash
+vsa skill            # .claude/skills/visualautomate-steps in this project, plus AGENTS.md and CLAUDE.md
+vsa skill --global   # ~/.claude/skills/visualautomate-steps, for every project
+vsa skill --dir out  # the skill's folder anywhere, e.g. to zip and upload to Claude on the web
+```
+
+Claude Code finds the skill on its own. `AGENTS.md` is read by Cursor, Copilot, Codex and others;
+`CLAUDE.md` is one line that pulls it in for Claude Code. Both carry the platform's rules: no `import`,
+only allowed packages, never a credential, `{ output, data }`. `vsa init` writes them into every new
+project as well.
+
+Running it again brings the files up to date with this CLI. An `AGENTS.md` or `CLAUDE.md` you wrote
+yourself is never written over: ours starts with a marker line, and a file without it is left alone.
+
 ## `add:property`
 
 A field on the node — what somebody fills in when they drop your module into a
@@ -73,8 +94,8 @@ vsa add:property select mode "Which way round" fast --options "Fast:fast,Thoroug
 and the default is stored as its type has it, so `2` is a number and `false` is a
 boolean.
 
-Types: `string`, `number`, `boolean`, `select`, `multiselect`, `json`, `color`,
-`date`, `connection`, `file`, `path`, `paths`. A `select` or `multiselect` needs
+Types: `string`, `number`, `boolean`, `select`, `multiselect`, `json`, `code`,
+`secret`, `color`, `date`, `connection`, `file`, `path`, `paths`. A `select` or `multiselect` needs
 `--options`, and a `connection` needs `--provider <name>`.
 
 The same field is added to `visualautomate.test.json` under `config`, with its
@@ -180,8 +201,9 @@ nothing.
 
 ## Where `fetch` may go
 
-On the platform a step may contact the domains its plugin declares, plus any
-host in the configuration filled in for that step. A declared domain covers its
+On the platform a step may contact the hosts allowed for its plugin, which are
+set on the platform rather than declared in the manifest, plus any host in the
+configuration filled in for that step. A declared domain covers its
 subdomains; localhost, private networks and metadata addresses are never
 allowed.
 

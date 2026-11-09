@@ -1,0 +1,30 @@
+{
+  "description": "Lists the connected GitHub account's repositories",
+  "icon": "github",
+  "properties": {
+    "account": {
+      "label": "GitHub account",
+      "type": "connection",
+      "provider": "github",
+      "required": true,
+      "description": "Which connected account to act as"
+    },
+    "perPage": {
+      "label": "How many",
+      "type": "number",
+      "default": 10,
+      "min": 1,
+      "max": 100
+    }
+  },
+  "inputs": [
+    "input"
+  ],
+  "outputs": [
+    "success",
+    "error"
+  ],
+  "outputFields": {
+    "repositories": "Names of the account's repositories"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "description": "Greets someone",
+  "icon": "sparkles",
+  "properties": {
+    "name": {
+      "label": "Name",
+      "type": "string",
+      "required": true,
+      "description": "Who to greet"
+    }
+  },
+  "inputs": [
+    "input"
+  ],
+  "outputs": [
+    "success",
+    "error"
+  ],
+  "outputFields": {
+    "greeting": "The greeting text"
+  }
+}

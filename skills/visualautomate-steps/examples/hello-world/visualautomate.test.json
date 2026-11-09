@@ -1,0 +1,7 @@
+{
+  "config": {
+    "name": "VisualAutomate"
+  },
+  "input": {},
+  "expectOutput": "success"
+}

@@ -5,7 +5,8 @@ The tools for building VisualAutomate plugins, published to npm.
 | Package | What it is |
 |---|---|
 | [`@visualautomate/plugin-sdk`](packages/plugin-sdk) | The types a plugin is written against, a local simulator, and the checks the platform applies to plugin code |
-| [`@visualautomate/cli`](packages/cli) | `vsa` (also `va`, `visualautomate`): `init`, `dev`, `test`, `push`, `login` |
+| [`@visualautomate/cli`](packages/cli) | `vsa` (also `va`, `visualautomate`): `init`, `dev`, `test`, `types`, `add:property`, `skill` |
+| [`skills/visualautomate-steps`](skills/visualautomate-steps) | An AI skill: the guide Claude, Cursor and other assistants follow to build a step from a sentence |
 
 Most plugin authors install only the CLI:
 
@@ -22,6 +23,26 @@ suite:
 ```bash
 npm install --save-dev @visualautomate/plugin-sdk
 ```
+
+## Building steps with an AI assistant
+
+`skills/visualautomate-steps` is an [agent skill](skills/visualautomate-steps/SKILL.md): the workflow
+for building a step (understand it, choose a declared or a code step, write the files, run `vsa test`,
+hand over), the platform's rules, references, and examples. The CLI carries it and installs it:
+
+```bash
+vsa skill            # .claude/skills/visualautomate-steps here, plus AGENTS.md and CLAUDE.md
+vsa skill --global   # ~/.claude/skills/visualautomate-steps, for every project
+vsa skill --dir out  # the folder anywhere, e.g. to zip and upload to Claude on the web
+```
+
+`vsa init` writes `AGENTS.md` and `CLAUDE.md` into every new project too, so Cursor, Copilot, Codex
+and Claude Code know the platform's rules before they write a line.
+
+The skill is held to the SDK by `test/skill.test.mjs`: every example passes the platform's code
+check, the ones that need no network or account run with `vsa test`, and the lists in
+`references/sandbox.md` (packages, refused patterns, blocked globals) are generated from the SDK.
+After changing `platform-rules.ts` or `context-api.ts`, run `npm run skill:sync`.
 
 ## Development
 

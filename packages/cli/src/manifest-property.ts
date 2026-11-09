@@ -23,6 +23,8 @@ export const PROPERTY_TYPES = [
     "select",
     "multiselect",
     "json",
+    "code",
+    "secret",
     "color",
     "date",
     "connection",

@@ -303,6 +303,13 @@ export type PluginPropertyType =
      * saved as the number five and the step would run nothing.
      */
     | "code"
+    /**
+     * A key the user types in: an API key, a token. A string to your code and to
+     * a declared call (`Bearer {{config.apiKey}}`), and masked wherever it is
+     * shown, because it is the one value on a step that somebody looking over a
+     * shoulder must not be able to read off.
+     */
+    | "secret"
     | "color"
     | "date"
     /** An account the user connected. Rendered as a picker, not a text box. */

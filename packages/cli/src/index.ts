@@ -25,10 +25,12 @@ import { existsSync, watch } from "node:fs"
 import { basename, dirname, join, relative, resolve, sep } from "node:path"
 import { spawn } from "node:child_process"
 import { createRequire } from "node:module"
+import { homedir } from "node:os"
 
 import { build, stop as stopBundler } from "esbuild"
 import { loadPluginCode, sandboxRequire, simulate, validatePluginCode } from "@visualautomate/plugin-sdk"
 import { TYPE_DECLARATIONS } from "./declarations"
+import { AGENTS_FILE, CLAUDE_FILE, ensureAgentFiles, foreignAgentFiles, installSkill, SKILL_NAME, skillFileCount } from "./ai-files"
 import { ensureRepoTypes, JSCONFIG_FILE, projectRoot, TYPES_FILE } from "./repo-types"
 import { TEMPLATES, type TemplateName } from "./templates"
 import { parseJsonc } from "./jsonc"
@@ -142,17 +144,69 @@ async function cmdInit(args: string[], flags: Flags): Promise<void> {
         join(target, "README.md"),
         `# ${name}\n\n${template.description}\n\n` +
             "```bash\n" +
-            "visualautomate test     # run it here\n" +
-            "visualautomate push     # publish it to your account\n" +
+            "vsa dev      # run it in the sandbox, again on every save\n" +
+            "vsa test     # run it once, as the platform's check does\n" +
             "```\n\n" +
             "`manifest.json` declares the fields the canvas shows and what this step hands on.\n" +
-            "`test.json` is the input, config and state `test` runs with.\n",
+            "`test.json` is the input, config and state `test` runs with.\n" +
+            "`AGENTS.md` and `CLAUDE.md` tell an AI assistant the platform's rules; `vsa skill` adds the full guide.\n\n" +
+            "To publish, put the step in a GitHub repository (`manifest.json`, `index.js`, `visualautomate.test.json`)\n" +
+            "and connect it on https://developers.visualautomate.com.\n",
     )
+    // So an assistant opened in this folder knows the rules before it writes a line.
+    ensureAgentFiles(target, VERSION)
 
     ok(green(`\n✓ Created ${name} from the "${templateName}" template\n`))
     ok("  cd " + name)
-    ok("  visualautomate test")
-    ok("  visualautomate push\n")
+    ok("  vsa dev")
+    ok(dim("\n  Building with an AI assistant? `vsa skill` installs the guide it reads.\n"))
+}
+
+// ─── skill ───────────────────────────────────────────────────────────────────
+
+/**
+ * `vsa skill [--global | --dir <folder>]`
+ *
+ * Installs the AI skill this CLI carries, so an assistant can build a step from
+ * a sentence: the workflow, the platform's rules, the references and examples.
+ *
+ *   (no flag)     .claude/skills/visualautomate-steps in this project, plus
+ *                 AGENTS.md and CLAUDE.md at its root for every other assistant
+ *   --global      ~/.claude/skills/visualautomate-steps, for every project
+ *   --dir <path>  the skill's folder anywhere, e.g. to zip and upload to Claude
+ *
+ * Running it again brings the files up to date with this CLI.
+ */
+async function cmdSkill(flags: Flags): Promise<void> {
+    const cwd = process.cwd()
+    const project = !flags.global && !flags.dir
+    const root = projectRoot(cwd)
+    const dir = flags.global
+        ? join(homedir(), ".claude", "skills", SKILL_NAME)
+        : flags.dir
+          ? resolve(cwd, flags.dir)
+          : join(root, ".claude", "skills", SKILL_NAME)
+
+    const changed = installSkill(dir)
+    const where = flags.global ? dir : relative(cwd, dir) || "."
+    ok(
+        changed > 0
+            ? green(`\u2713 Installed the ${SKILL_NAME} skill in ${where} (${changed} of ${skillFileCount()} files written)`)
+            : `The ${SKILL_NAME} skill in ${where} is already this CLI's version.`,
+    )
+
+    if (project) {
+        const written = ensureAgentFiles(root, VERSION)
+        if (written.length > 0) ok(green(`\u2713 Wrote ${written.join(" and ")}`))
+        for (const name of foreignAgentFiles(root)) {
+            ok(yellow(`  ${name} is your own and was left alone. Point it at .claude/skills/${SKILL_NAME}/SKILL.md if you like.`))
+        }
+    }
+
+    ok(dim("\nAsk your assistant for a step in a sentence, for example:"))
+    ok(dim('  "Make a VisualAutomate step that creates an invoice in Moneybird."'))
+    if (project) ok(dim(`Claude Code finds the skill on its own; Cursor, Copilot and Codex read ${AGENTS_FILE}.`))
+    if (flags.dir) ok(dim("For Claude on the web or desktop, zip that folder and upload it as a skill."))
 }
 
 // ─── Compiling the author's plugin ───────────────────────────────────────────
@@ -477,7 +531,7 @@ async function cmdTest(args: string[], flags: Flags): Promise<void> {
  *
  * A field on the node, written into the module's manifest.json. Typing one out
  * by hand means knowing the key order, the label convention and which of the
- * twelve types exist — all of it in a file most authors open twice a month —
+ * fourteen types exist — all of it in a file most authors open twice a month —
  * and getting it subtly wrong is not noticed until the node is on a canvas.
  *
  * The file is edited in place: comments, examples and the author's own
@@ -674,6 +728,7 @@ vsa — build and test VisualAutomate plugins
   vsa types                    write the types your editor reads
   vsa add:property <type> <name> [description] [default]
                                add a field to a module's manifest
+  vsa skill [--global]         the guide an AI assistant reads to build steps
   vsa --version                this CLI's version
 
 \`va\` and \`visualautomate\` are the same command.
@@ -693,6 +748,11 @@ Options for \`add:property\`:
   --provider <name>    for connection: whose account this is
 
 Property types: ${PROPERTY_TYPES.join(", ")}
+
+Options for \`skill\`:
+  (none)               .claude/skills/${SKILL_NAME} here, plus ${AGENTS_FILE} and ${CLAUDE_FILE}
+  --global             ~/.claude/skills/${SKILL_NAME}, for every project
+  --dir <folder>       the skill's folder anywhere, e.g. to zip for Claude on the web
 
 Options for \`dev\` and \`test\`:
   --module <name>      the same as naming it: vsa dev send-message
@@ -747,6 +807,8 @@ async function main(): Promise<void> {
         case "dev":
         case "watch":
             return cmdDev(args, flags)
+        case "skill":
+            return cmdSkill(flags)
         // `plugin test` is accepted as an alias.
         case "plugin": {
             if (args.shift() === "test") return cmdTest(args, flags)

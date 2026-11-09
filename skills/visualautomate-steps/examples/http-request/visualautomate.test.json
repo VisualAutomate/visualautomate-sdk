@@ -1,0 +1,8 @@
+{
+  "config": {
+    "url": "https://httpbin.org/get",
+    "method": "GET"
+  },
+  "input": {},
+  "expectOutput": "success"
+}

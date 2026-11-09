@@ -1,0 +1,18 @@
+{
+  "config": {},
+  "input": {
+    "orders": [
+      {
+        "id": "a",
+        "total": 10,
+        "createdAt": "2026-09-14T10:00:00Z"
+      },
+      {
+        "id": "b",
+        "total": 5,
+        "createdAt": "2026-09-14T12:00:00Z"
+      }
+    ]
+  },
+  "expectOutput": "success"
+}

@@ -1,0 +1,15 @@
+{
+  "description": "Validates orders and groups them by day",
+  "icon": "package",
+  "properties": {},
+  "inputs": [
+    "input"
+  ],
+  "outputs": [
+    "success",
+    "error"
+  ],
+  "outputFields": {
+    "byDay": "Order totals per day"
+  }
+}
