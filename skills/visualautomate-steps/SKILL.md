@@ -93,7 +93,7 @@ What a red result can mean, and what to do:
 - **`context.media is not available locally`**: expected for a step that uses ffmpeg; it runs on the platform.
 - **a network failure**: the API needs the user's key or a host this machine cannot reach. Make sure the step fails cleanly by its `error` port, and say what you could not verify.
 
-A **declared step** is checked by `vsa test` (`✓ checked … the manifest is sound`) but not run, here or by the push check. Fix every `✗ manifest` line, read the warnings, and check the request against the API's documentation. Then it goes to the developer portal: **New module → Call an API**, paste the `manifest.json` into the module's manifest editor (the form above it edits the same file), press **Try it** with an account, and publish there. Publishing needs a Try it that came back on `success`, on the saved version.
+A **declared step** is checked by `vsa test` (`✓ checked … the manifest is sound`) but not run, here or by the push check. Fix every `✗ manifest` line, read the warnings, and check the request against the API's documentation. Then it goes to the developer portal: **New module → Call an API**, paste the `manifest.json` into the module's manifest editor (the form above it edits the same file), press **Test the call** with an account, and publish there. Publishing needs a test that came back on `success`, on the saved version.
 
 ### 6. Hand over
 
@@ -103,7 +103,7 @@ Tell the user, briefly:
 - the files, and what each field and output is;
 - what `vsa test` said (or what you could not test, and why);
 - the next steps, for code modules: push to GitHub; on https://developers.visualautomate.com create the plugin or app (and a **Write code** module), import the repository under **GitHub repository**, wait for the commit's check to pass **on success**, then publish. Private steps are usable at once; public ones are reviewed first.
-- for declared modules: on the portal, **New module → Call an API**, paste the `manifest.json`, **Try it**, publish. They are never published from GitHub.
+- for declared modules: on the portal, **New module → Call an API**, paste the `manifest.json`, **Test the call**, publish. They are never published from GitHub.
 - if an account property has no account named in the test file: that the user must add one (the module's page lists the ids) before the step can be published.
 
 ## Hard rules

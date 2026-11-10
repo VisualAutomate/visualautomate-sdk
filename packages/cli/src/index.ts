@@ -316,7 +316,7 @@ async function runTarget(target: Target, flags: Flags, several: boolean): Promis
             const what = shape.kind === "outputs-only" ? "a declared step with no request" : "a declared step"
             say(`${green(bold("✓ checked"))}  ${dim(`${what}: the manifest is sound`)}`)
             say(dim("           Not run here, and not published from GitHub. On the developer portal: New module → Call an API,"))
-            say(dim("           paste this manifest.json into the module's manifest.json editor, press Try it, then publish it there."))
+            say(dim("           paste this manifest.json into the module's manifest.json editor, press Test the call, then publish it there."))
             return true
         }
 

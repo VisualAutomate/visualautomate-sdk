@@ -64,7 +64,7 @@ Before writing or changing a step, read the full guide: \`.claude/skills/${SKILL
 - \`vsa test\` is the push check, here (\`vsa test <module>\` for one module of an app): it checks every manifest, and loads and runs every code step the way the platform does. Fix the code until it passes; never weaken the check.
 - A run must leave by the test file's \`expectOutput\`, which is \`success\` when it names none.
 - Locally there is no connected account: \`context.connections\` is absent, so check for it. \`context.media\` only runs on the platform.
-- Declared steps are checked by \`vsa test\`, then pasted into the portal, run with Try it, and published there.
+- Declared steps are checked by \`vsa test\`, then pasted into the portal, run with Test the call, and published there.
 
 Publishing is done by the developer, from GitHub, on https://developers.visualautomate.com, and needs one push whose test came back on \`success\`. For a step that acts as an account, that means the id of a connected account under \`config\` in visualautomate.test.json (the module's page on the portal lists them).
 `
