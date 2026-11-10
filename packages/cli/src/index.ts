@@ -309,11 +309,8 @@ async function runTarget(target: Target, flags: Flags, several: boolean): Promis
         if (!shape.ok) return false
 
         if (target.entry === null) {
-            if (shape.kind === "trigger") {
-                say(`${green(bold("✓ checked"))}  ${dim("a trigger: the manifest is sound")}`)
-                say(dim("           Not run here. A push publishes only a module with an index.js that passes its test, so this one cannot be published from GitHub."))
-                return true
-            }
+            // A trigger never gets here: it watches an account, so checkManifest
+            // refuses it, and only VisualAutomate's own apps have one.
             const what = shape.kind === "outputs-only" ? "a declared step with no request" : "a declared step"
             say(`${green(bold("✓ checked"))}  ${dim(`${what}: the manifest is sound`)}`)
             say(dim("           Not run here, and not published from GitHub. On the developer portal: New module → Call an API,"))
