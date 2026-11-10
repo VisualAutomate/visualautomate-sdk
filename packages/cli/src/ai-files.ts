@@ -54,8 +54,8 @@ Before writing or changing a step, read the full guide: \`.claude/skills/${SKILL
 2. The word \`import\` may not appear anywhere in \`index.js\`, comments included. Neither may \`eval(\`, \`Function(\`, \`process.env\`, \`globalThis\`, \`Reflect\`, \`Proxy\`, \`constructor\`, \`__proto__\` or \`WebAssembly\`.
 3. \`require\` only allowed npm packages, by bare name and with a string literal. No \`fs\`, \`http\`, \`os\`, \`child_process\` or \`Buffer\`; use \`context.storage\`, \`fetch\` and \`Uint8Array\`.
    Steps run on Node ${PLATFORM_NODE_MAJOR} in a context with only the platform's globals: no \`process\`, \`globalThis\`, \`structuredClone\` or \`setImmediate\`, and \`console\` has \`log\`, \`error\`, \`warn\` and \`info\` only. End \`index.js\` with a newline.
-4. Never read or hold a credential. A connected account is \`context.connections.get("<connection property>")\` and \`request({ path })\` with a path relative to the provider.
-5. A user's own key is a \`secret\` property; a key the plugin holds is \`context.secrets\`. Nothing secret goes in the repository.
+4. No connected accounts: only VisualAutomate's own apps act as somebody's account, so there is no \`connection\` property, \`optionsFrom\`, \`action.connection\`, \`trigger\` or \`auth.provider\`, and \`vsa test\` refuses them. Call the API at its own address (\`action.baseUrl\`, or \`fetch\` in code).
+5. A user's own key is a \`secret\` property, sent as e.g. \`Authorization: Bearer {{config.apiKey}}\`; a key the plugin holds is \`context.secrets\`. Nothing secret goes in the repository.
 6. Return \`{ output, data }\`, where \`output\` is one of the manifest's \`outputs\`. Expected failures leave by \`"error"\` with a readable \`data.error\`.
 7. Limits: \`timeoutMs\` at most 60000 (the push check gives 30000 when the manifest names none), \`memoryLimitMb\` at most 128, a state value at most 128 KB, \`index.js\` at most 100,000 characters.
 
@@ -63,10 +63,10 @@ Before writing or changing a step, read the full guide: \`.claude/skills/${SKILL
 
 - \`vsa test\` is the push check, here (\`vsa test <module>\` for one module of an app): it checks every manifest, and loads and runs every code step the way the platform does. Fix the code until it passes; never weaken the check.
 - A run must leave by the test file's \`expectOutput\`, which is \`success\` when it names none.
-- Locally there is no connected account: \`context.connections\` is absent, so check for it. \`context.media\` only runs on the platform.
+- \`context.media\` only runs on the platform.
 - Declared steps are checked by \`vsa test\`, then pasted into the portal, run with Test the call, and published there.
 
-Publishing is done by the developer, from GitHub, on https://developers.visualautomate.com, and needs one push whose test came back on \`success\`. For a step that acts as an account, that means the id of a connected account under \`config\` in visualautomate.test.json (the module's page on the portal lists them).
+Publishing is done by the developer, from GitHub, on https://developers.visualautomate.com, and needs one push whose test came back on \`success\`. A key the test needs goes in the plugin's \`context.secrets\` on the portal, never in a committed test file.
 `
 }
 

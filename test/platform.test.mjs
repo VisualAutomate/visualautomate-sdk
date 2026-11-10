@@ -16,6 +16,7 @@ import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 
 import {
+    ACCOUNTS_ARE_OURS,
     BLOCKED_GLOBAL_NAMES,
     MAX_CODE_LENGTH,
     PLATFORM_NODE_MAJOR,
@@ -23,6 +24,7 @@ import {
     PUSH_CHECK,
     SANDBOX_OVERRIDES,
     STATE_LIMITS,
+    accountUseIn,
     checkManifest,
     executeOf,
     loadPluginCode,
@@ -175,23 +177,24 @@ test("storage has shareUrl, and signedUrl keeps the platform's bounds", async ()
 // ─── The manifest ───────────────────────────────────────────────────────────
 
 test("checkManifest refuses what the portal refuses and warns about what it drops", () => {
-    const account = { label: "Account", type: "connection" }
+    const key = { label: "API key", type: "secret", required: true }
     const good = checkManifest({
-        properties: { account, channel: { label: "Channel", type: "string" } },
+        properties: { apiKey: key, channel: { label: "Channel", type: "string" } },
         outputs: ["success", "error"],
-        action: { connection: "account", request: { method: "POST", path: "chat.postMessage", body: { channel: "{{config.channel}}" } }, okPath: "ok", outputs: { ts: "{{response.ts}}" } },
+        action: {
+            baseUrl: "https://slack.com/api",
+            request: { method: "POST", path: "chat.postMessage", headers: { Authorization: "Bearer {{config.apiKey}}" }, body: { channel: "{{config.channel}}" } },
+            okPath: "ok",
+            outputs: { ts: "{{response.ts}}" },
+        },
     }, false)
     assert.deepEqual([good.ok, good.kind, good.errors], [true, "declared", []])
 
     const cases = [
         [{ auth: { type: "oauth2", baseUrl: "https://x" } }, true, /may not name a host/],
-        [{ properties: { a: account }, action: { connection: "a", baseUrl: "https://x", request: { path: "y" }, outputs: {} } }, false, /never both/],
-        [{ properties: { a: { label: "A", type: "string" } }, action: { connection: "a", request: { path: "y" }, outputs: {} } }, false, /rather than a connection/],
         [{ action: { baseUrl: "https://{{input.host}}", request: { path: "y" }, outputs: {} } }, false, /never \{\{input/],
         [{ action: { baseUrl: "https://x", request: { path: "https://evil.example/y" }, outputs: {} } }, false, /relative/],
-        [{ properties: { a: account }, action: { connection: "a", request: { path: "y" }, outputs: {} } }, true, /both an action block and code/],
-        [{ properties: { a: account }, trigger: { connection: "a", request: { path: "messages" }, id: "id" } }, false, /trigger\.items/],
-        [{ properties: { pick: { label: "Pick", type: "select", optionsFrom: { connection: "nobody", request: { path: "x" }, label: "{{item.name}}", value: "{{item.id}}" } } } }, true, /not one of this step's properties/],
+        [{ action: { baseUrl: "https://x", request: { path: "y" }, outputs: {} } }, true, /both an action block and code/],
         [{}, false, /nothing to run/],
     ]
     for (const [manifest, hasCode, error] of cases) {
@@ -202,15 +205,34 @@ test("checkManifest refuses what the portal refuses and warns about what it drop
 
     const warned = checkManifest({
         extra: 1,
-        properties: { a: account, mode: { label: "Mode", type: "select" } },
+        properties: { mode: { label: "Mode", type: "select" } },
         outputs: ["success"],
         timeoutMs: 120000,
-        trigger: { connection: "a", request: { path: "messages" }, items: "value", id: "id", cursor: { from: "item", path: "date" } },
-    }, false)
-    assert.equal(warned.ok, true)
-    assert.equal(warned.kind, "trigger")
+    }, true)
+    assert.equal(warned.ok, true, warned.errors.join("; "))
     const said = warned.warnings.join("\n")
-    for (const words of [/"extra" is not something/, /no options and no optionsFrom/, /cut to 60000/, /initial": "now"/]) assert.match(said, words)
+    for (const words of [/"extra" is not something/, /no options and no optionsFrom/, /cut to 60000/]) assert.match(said, words)
+})
+
+test("checkManifest refuses every way a step would act as a connected account", () => {
+    // Only VisualAutomate's own apps act as one; the platform refuses a
+    // developer's step that does, and the portal will not save or publish it.
+    const account = { label: "Account", type: "connection", provider: "github" }
+    const cases = [
+        [{ properties: { account } }, true, /properties\.account is a connection/],
+        [{ properties: { account }, action: { connection: "account", request: { path: "user" }, outputs: { a: "{{response.a}}" } } }, false, /action\.connection makes the call as an account/],
+        [{ properties: { pick: { label: "Pick", type: "select", optionsFrom: { connection: "account", request: { path: "x" } } } } }, true, /optionsFrom reads its options as an account/],
+        [{ trigger: { connection: "account", request: { path: "messages" }, items: "value", id: "id" } }, false, /trigger watches an account/],
+        [{ auth: { type: "oauth2", provider: "github" } }, true, /auth\.provider names "github"/],
+    ]
+    for (const [manifest, hasCode, error] of cases) {
+        const check = checkManifest({ outputs: ["success"], ...manifest }, hasCode)
+        assert.equal(check.ok, false, JSON.stringify(manifest))
+        const errors = check.errors.join("\n")
+        assert.match(errors, error)
+        assert.ok(errors.includes(ACCOUNTS_ARE_OURS), "the refusal says what to do instead")
+    }
+    assert.deepEqual(accountUseIn({ properties: { apiKey: { type: "secret" } } }), [])
 })
 
 // ─── The CLI, judging as the push check does ────────────────────────────────
@@ -251,16 +273,20 @@ test("vsa test runs a step without Buffer, as the platform does", () => {
     assert.match(run.out, /Cannot read properties of undefined|Buffer/)
 })
 
-test("vsa test checks a declared module and a trigger, and refuses a broken one", () => {
+test("vsa test checks a declared module, and refuses a broken one and one that acts as an account", () => {
     const dir = scratch()
-    const account = { label: "Account", type: "connection", provider: "github" }
     write(dir, {
         "modules/list-repos/manifest.json": {
             description: "List repositories",
-            auth: { type: "oauth2", provider: "github" },
-            properties: { account },
+            auth: { type: "none" },
+            properties: { token: { label: "GitHub token", type: "secret", required: true } },
             outputs: ["success", "error"],
-            action: { connection: "account", request: { method: "GET", path: "user/repos" }, items: { path: "" }, outputs: { name: "{{item.full_name}}" } },
+            action: {
+                baseUrl: "https://api.github.com",
+                request: { method: "GET", path: "user/repos", headers: { Authorization: "Bearer {{config.token}}" } },
+                items: { path: "" },
+                outputs: { name: "{{item.full_name}}" },
+            },
         },
         "modules/broken/manifest.json": {
             description: "Broken",
@@ -268,27 +294,18 @@ test("vsa test checks a declared module and a trigger, and refuses a broken one"
             outputs: ["success"],
             action: { baseUrl: "http://plain.example", request: { path: "x" }, outputs: {} },
         },
+        "modules/as-account/manifest.json": {
+            description: "As an account",
+            auth: { type: "oauth2", provider: "github" },
+            properties: { account: { label: "Account", type: "connection", provider: "github" } },
+            outputs: ["success", "error"],
+            action: { connection: "account", request: { method: "GET", path: "user" }, outputs: { login: "{{response.login}}" } },
+        },
     })
     const run = vsa(dir, "test")
     assert.equal(run.code, 1, run.out)
     assert.match(run.out, /✓ checked\s+a declared step: the manifest is sound/)
     assert.match(run.out, /✗ manifest\s+action\.baseUrl must start with https:\/\//)
-    assert.match(run.out, /1 of 2 passed/)
-})
-
-test("vsa test says when an account property has no account named for the push check", () => {
-    const dir = scratch()
-    write(dir, {
-        "manifest.json": {
-            description: "x",
-            auth: { type: "oauth2", provider: "github" },
-            properties: { account: { label: "Account", type: "connection", provider: "github" } },
-            outputs: ["success", "error"],
-        },
-        "index.js": 'module.exports = { execute: async (i, c, context) => context.connections ? { output: "success", data: {} } : { output: "error", data: { error: "No account" } } }\n',
-        "visualautomate.test.json": { config: {}, expectOutput: "error" },
-    })
-    const run = vsa(dir, "test")
-    assert.equal(run.code, 0, run.out)
-    assert.match(run.out, /does not count for publishing/)
+    assert.match(run.out, /✗ manifest\s+properties\.account is a connection/)
+    assert.match(run.out, /1 of 3 passed/)
 })

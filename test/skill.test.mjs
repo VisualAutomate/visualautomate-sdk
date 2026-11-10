@@ -16,7 +16,7 @@ import { tmpdir } from "node:os"
 import { join, relative } from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { checkManifest, loadPluginCode, sandboxRequire, simulate, validatePluginCode } from "../packages/plugin-sdk/dist/index.mjs"
+import { accountUseIn, checkManifest, validatePluginCode } from "../packages/plugin-sdk/dist/index.mjs"
 import { filled, SANDBOX_MD } from "../scripts/sync-skill.mjs"
 
 const SKILL = fileURLToPath(new URL("../skills/visualautomate-steps", import.meta.url))
@@ -31,7 +31,7 @@ const RUNNABLE = ["hello-world", "branching-outputs", "secrets", "state-dedupe",
 
 /** The platform's own lists (lib/plugins/manifest.ts in the app). */
 const KNOWN_BLOCKS = new Set(["properties", "inputs", "outputs", "outputFields", "auth", "trigger", "action", "timeoutMs", "memoryLimitMb", "icon", "color", "description", "version"])
-const PROPERTY_TYPES = new Set(["string", "number", "boolean", "select", "multiselect", "json", "code", "color", "date", "connection", "file", "path", "paths", "secret"])
+const PROPERTY_TYPES = new Set(["string", "number", "boolean", "select", "multiselect", "json", "code", "color", "date", "file", "path", "paths", "secret"])
 
 function env(extra = {}) {
     const e = { ...process.env, NO_COLOR: "1", ...extra }
@@ -140,15 +140,18 @@ test("vsa test at the root of an app without code checks every module", () => {
     assert.equal(run.out.match(/✓ checked/g)?.length, 4)
 })
 
-test("the modules of one app act as the same account", () => {
+test("the modules of one app ask for the same key, and none acts as an account", () => {
+    // Only VisualAutomate's own apps act as a connected account; an app of
+    // the developer's asks every module for the service's key the same way.
     for (const app of apps) {
-        const accounts = new Set()
+        const keys = new Set()
         for (const m of app.modules) {
             const manifest = manifestOf(`apps/${app.name}/modules/${m}`)
-            const connection = Object.values(manifest.properties ?? {}).find((p) => p.type === "connection")
-            if (connection) accounts.add(`${connection.provider} ${JSON.stringify(manifest.auth)}`)
+            assert.deepEqual(accountUseIn(manifest), [], `apps/${app.name}/modules/${m} uses an account`)
+            const secret = Object.entries(manifest.properties ?? {}).find(([, p]) => p.type === "secret")
+            if (secret) keys.add(`${secret[0]} ${secret[1].label}`)
         }
-        assert.ok(accounts.size <= 1, `apps/${app.name}: modules disagree on the account: ${[...accounts].join(" / ")}`)
+        assert.ok(keys.size <= 1, `apps/${app.name}: modules ask for the key differently: ${[...keys].join(" / ")}`)
     }
 })
 
@@ -198,31 +201,17 @@ test("every example's manifest keeps to what the platform accepts", () => {
         for (const [, key] of declared.matchAll(/\{\{\s*config\.([A-Za-z0-9_]+)/g)) {
             assert.ok(key in properties, `${where}: {{config.${key}}} names no property`)
         }
-        const isConnection = (key) => properties[key]?.type === "connection"
+        // Only VisualAutomate's own apps act as a connected account.
+        assert.deepEqual(accountUseIn(m), [], `${where}: uses an account`)
 
         if (m.action) {
             assert.ok(!existsSync(join(EXAMPLES, name, "index.js")), `${where}: a declared step has no index.js`)
             if (m.action.request) {
-                const viaConnection = "connection" in m.action
-                const viaBaseUrl = "baseUrl" in m.action
-                assert.ok(viaConnection !== viaBaseUrl, `${where}: exactly one of connection and baseUrl`)
-                if (viaConnection) assert.ok(isConnection(m.action.connection), `${where}: action.connection names a connection property`)
-                if (viaBaseUrl) {
-                    assert.match(m.action.baseUrl, /^https:\/\//, `${where}: baseUrl is https`)
-                    assert.doesNotMatch(m.action.baseUrl, /\{\{\s*input\./, `${where}: baseUrl may not read input`)
-                }
+                assert.match(m.action.baseUrl ?? "", /^https:\/\//, `${where}: a request names its https host in baseUrl`)
+                assert.doesNotMatch(m.action.baseUrl, /\{\{\s*input\./, `${where}: baseUrl may not read input`)
                 assert.doesNotMatch(m.action.request.path, /^[a-z]+:\/\//i, `${where}: request.path is relative`)
             }
             assert.ok(m.action.outputs && Object.keys(m.action.outputs).length > 0, `${where}: action.outputs`)
-        }
-
-        if (m.trigger) {
-            const t = m.trigger
-            assert.ok(isConnection(t.connection), `${where}: trigger.connection names a connection property`)
-            assert.ok(typeof t.items === "string" && typeof t.id === "string", `${where}: trigger.items and trigger.id`)
-            assert.doesNotMatch(t.request.path, /^[a-z]+:\/\//i, `${where}: trigger.request.path is relative`)
-            assert.equal(t.cursor?.initial, "now", `${where}: a trigger starts from now`)
-            assert.deepEqual(m.inputs ?? [], [], `${where}: a trigger has no inputs`)
         }
     }
 })
@@ -235,67 +224,6 @@ test("the runnable examples pass `vsa test`, as the push check would run them", 
         assert.equal(run.code, 0, `${name}:\n${run.out}`)
         assert.match(run.out, /passed/)
     }
-})
-
-test("an example that acts as an account runs without one, as the push check runs it when no account is named", () => {
-    const dir = scratch()
-    cpSync(join(EXAMPLES, "connection-account"), join(dir, "connection-account"), { recursive: true })
-    const run = vsa(join(dir, "connection-account"), ["test"])
-    assert.equal(run.code, 0, run.out)
-    assert.match(run.out, /does not count for publishing/)
-})
-
-test("the Gmail send-email module builds the message Gmail expects, and refuses cleanly", async () => {
-    const code = readFileSync(join(APPS, "gmail", "modules", "send-email", "index.js"), "utf8")
-    const check = validatePluginCode(code)
-    assert.ok(check.valid, check.error)
-    assert.deepEqual(check.packages, ["js-base64"])
-
-    // js-base64 is in the sandbox, not in this repository: stand in for it with
-    // Node's own base64, which is what the package does for these two calls.
-    const base64 = {
-        Base64: {
-            encode: (text) => Buffer.from(text, "utf8").toString("base64"),
-            encodeURI: (text) => Buffer.from(text, "utf8").toString("base64url"),
-        },
-    }
-    const plugin = loadPluginCode(code, sandboxRequire((name) => {
-        if (name === "js-base64") return base64
-        throw new Error(`not stubbed: ${name}`)
-    }))
-
-    const refused = await simulate(plugin, { config: { to: "", subject: "Hello", body: "Hi" } })
-    assert.equal(refused.output?.output, "error")
-
-    let asked
-    const sent = await simulate(plugin, {
-        config: { to: "ada@example.com, alan@example.com", subject: "Grüße", body: "Hallo", isHtml: false },
-        connections: {
-            async get(name) {
-                assert.equal(name, "account")
-                return {
-                    id: "test",
-                    async request(req) {
-                        asked = req
-                        return { ok: true, status: 200, body: { id: "m1", threadId: "t1" } }
-                    },
-                }
-            },
-        },
-    })
-    assert.equal(sent.output?.output, "success", JSON.stringify(sent))
-    // The step runs in a context of its own, so what it returns is that context's
-    // objects; compared as the platform hands them on, as JSON.
-    assert.deepEqual(JSON.parse(JSON.stringify(sent.output.data)), { id: "m1", threadId: "t1", to: ["ada@example.com", "alan@example.com"] })
-    assert.equal(asked.method, "POST")
-    assert.equal(asked.path, "gmail/v1/users/me/messages/send")
-    assert.doesNotMatch(asked.body.raw, /[+/=]/, "raw is base64url without padding")
-
-    const message = Buffer.from(asked.body.raw, "base64url").toString("utf8")
-    assert.match(message, /^To: ada@example\.com, alan@example\.com\r\n/)
-    assert.match(message, /\r\nSubject: =\?UTF-8\?B\?R3LDvMOfZQ==\?=\r\n/)
-    assert.match(message, /\r\nContent-Type: text\/plain; charset=UTF-8\r\n/)
-    assert.match(message, /\r\n\r\nSGFsbG8=$/)
 })
 
 test("`vsa skill --dir` installs exactly the skill in this repository", () => {

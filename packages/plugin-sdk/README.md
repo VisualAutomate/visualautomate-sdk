@@ -41,13 +41,12 @@ in your manifest. `data` is what the next steps read.
 | `storage` | the account's files — `put`, `get`, `delete`, `list`, `head`, `signedUrl`, `shareUrl`, `download` |
 | `state` | values that outlive one run, scoped to the workflow — `get`, `set` (at most 128 KB, `ttlSeconds` at least 60), `delete`, `list` (`{ keys: [{ key, expiresAt }], complete }`) |
 | `media` | ffmpeg, by operation name. Absent when the server has no sandbox configured |
-| `connections` | the accounts this step was configured with. Absent when it declares none, or none was chosen |
 | `workflowId`, `nodeId`, `userId`, `executionId`, `startedAt`, `secrets` | about the run |
 
-You never see a credential and you never name a host. `connections.get("account")`
-takes the name of one of *your* properties, and the platform attaches the token
-on the way past — which is what stops a plugin pointing somebody's account
-somewhere it chose.
+There is no connected account for your steps: only VisualAutomate's own apps act
+as one (`checkManifest` refuses a `connection` property, `optionsFrom`,
+`action.connection`, a `trigger` and `auth.provider`). A step reaches an API with
+the key a user enters in a `secret` property.
 
 ## `simulate`
 
@@ -72,22 +71,9 @@ platform's have — `get` on a missing key is `null`, `put` takes a string or by
 `list` is prefix-filtered, a state value over 128 KB or a `ttlSeconds` under 60 is
 refused, and an expired value reads as `null`.
 
-`connections` and `media` are not simulated. Without a stub, `context.connections`
-is absent, as on the platform when no account was chosen, and `context.media`
-fails with a sentence saying so. Pass a stub to test the code around them:
-
-```ts
-await simulate(plugin, {
-    connections: {
-        async get() {
-            return { id: "test", async request() { return { ok: true, status: 200, body: {} } } }
-        },
-    },
-})
-```
-
-Asserting on what your plugin *asked* the provider for is a better test than any
-imitation of the provider would be.
+`media` is not simulated: `context.media` fails with a sentence saying so. Stub
+`fetch` to test the code around an API call; asserting on what your plugin
+*asked* for is a better test than any imitation of the API would be.
 
 ## The platform's code checks
 
@@ -143,8 +129,9 @@ check.errors    // why it would be refused
 check.warnings  // what it would drop or regret
 ```
 
-The SDK's own reading of the rules the portal enforces, for code steps,
-declared steps (`action`), triggers and `optionsFrom`; the portal's word is final.
+The SDK's own reading of the rules the portal enforces, for code steps and
+declared steps (`action`), and the refusal of anything that would act as a
+connected account (`accountUseIn` lists each way in); the portal's word is final.
 
 ## The platform's facts
 
