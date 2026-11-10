@@ -135,6 +135,10 @@ export function checkManifest(raw: unknown, hasCode: boolean): ManifestCheck {
         else {
             if (typeof m.auth.type !== "string" || !AUTH_TYPES.has(m.auth.type)) {
                 errors.push(`auth.type must be one of ${[...AUTH_TYPES].join(", ")}.`)
+            } else if (m.auth.type !== "none" && !m.auth.provider) {
+                // The platform wants a provider for every other type, and a
+                // provider is an account to act as, which accountUseIn refuses.
+                errors.push(`auth.type "${m.auth.type}" needs a provider to sign in to, and only VisualAutomate's own apps name one: use { "type": "none" } and take the user's key in a property of type "secret".`)
             }
             for (const key of HOST_KEYS) {
                 if (key in m.auth) errors.push(`auth.${key} is refused: a manifest may not name a host. The provider's base URL belongs to the platform.`)

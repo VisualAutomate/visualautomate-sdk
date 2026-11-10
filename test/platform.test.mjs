@@ -192,6 +192,7 @@ test("checkManifest refuses what the portal refuses and warns about what it drop
 
     const cases = [
         [{ auth: { type: "oauth2", baseUrl: "https://x" } }, true, /may not name a host/],
+        [{ auth: { type: "api_key" } }, true, /auth\.type "api_key" needs a provider/],
         [{ action: { baseUrl: "https://{{input.host}}", request: { path: "y" }, outputs: {} } }, false, /never \{\{input/],
         [{ action: { baseUrl: "https://x", request: { path: "https://evil.example/y" }, outputs: {} } }, false, /relative/],
         [{ action: { baseUrl: "https://x", request: { path: "y" }, outputs: {} } }, true, /both an action block and code/],

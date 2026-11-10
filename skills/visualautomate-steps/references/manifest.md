@@ -38,7 +38,7 @@ Declares a step: the fields the canvas draws, the ports it leaves by, what it ha
 | `inputs` | string[] | Default `["input"]` |
 | `outputs` | string[] | Ports. Default `["success", "error"]`. Each is a line a user can draw from |
 | `outputFields` | object | Describes the keys of `data` for the next step's picker: `{ "id": "The new id" }`, or `{ "items": { "type": "list", "description": "..." } }` |
-| `auth` | object | `{ "type": "oauth2" \| "api_key" \| "basic" \| "none", "provider"?: "...", "scopes"?: [...] }` |
+| `auth` | object | `{ "type": "none" }`, or leave it out. The other types (`oauth2`, `api_key`, `basic`) name a provider to sign in to, which only VisualAutomate's own apps do. A user's key goes in a `secret` property |
 | `timeoutMs` | number | Default 10000 on a canvas and 30000 in the push check, max 60000, and never more than the user's plan allows. The push check reads it here, not from the test file |
 | `memoryLimitMb` | number | Default 32, max 128 |
 | `action` | object | A declared step. See `declared-steps.md` |
