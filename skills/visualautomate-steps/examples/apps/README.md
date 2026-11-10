@@ -15,7 +15,7 @@ my-app/
 
 The app itself has no file: its name, description, logo and **connection** (what a user connects when they add the app: an OAuth sign-in, or a key) are set on the developer portal. Every module that acts as the account declares the same `connection` property, here always called `account`.
 
-**Code modules** are published from the repository: a push tests them, and a commit that passed on `success` is published. **Declared modules** are kept here as `manifest.json` so `vsa test` can check them, but they are published from the portal: **New module → Call an API**, paste the manifest into the module's editor, **Try it**, publish.
+**Code modules** are published from the repository: a push tests them, and a commit that passed on `success` is published. **Declared modules** are kept here as `manifest.json` so `vsa test` can check them, but they are published from the portal: **New module → Call an API**, paste the manifest into the module's editor, **Test the call**, publish.
 
 | App | Modules | Connection | Shows |
 | --- | --- | --- | --- |
