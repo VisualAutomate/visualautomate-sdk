@@ -1,0 +1,59 @@
+{
+  "description": "Calls any HTTP endpoint",
+  "icon": "globe",
+  "timeoutMs": 20000,
+  "properties": {
+    "url": {
+      "label": "URL",
+      "type": "string",
+      "required": true,
+      "pattern": "^https://"
+    },
+    "method": {
+      "label": "Method",
+      "type": "select",
+      "default": "GET",
+      "options": [
+        {
+          "label": "GET",
+          "value": "GET"
+        },
+        {
+          "label": "POST",
+          "value": "POST"
+        },
+        {
+          "label": "PUT",
+          "value": "PUT"
+        },
+        {
+          "label": "DELETE",
+          "value": "DELETE"
+        }
+      ]
+    },
+    "body": {
+      "label": "Body",
+      "type": "json",
+      "description": "Sent as JSON for POST and PUT"
+    },
+    "timeoutSeconds": {
+      "label": "Give up after (s)",
+      "type": "number",
+      "default": 10,
+      "min": 1,
+      "max": 15
+    }
+  },
+  "inputs": [
+    "input"
+  ],
+  "outputs": [
+    "success",
+    "error"
+  ],
+  "outputFields": {
+    "status": "HTTP status",
+    "body": "The parsed response, or text"
+  }
+}

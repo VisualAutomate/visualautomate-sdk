@@ -1,0 +1,90 @@
+{
+  "description": "Put an emoji reaction on a message",
+  "icon": "smile",
+  "color": "#4a154b",
+  "timeoutMs": 30000,
+  "version": 1,
+  "auth": {
+    "type": "oauth2",
+    "provider": "slack",
+    "scopes": [
+      "chat:write",
+      "channels:read",
+      "channels:history",
+      "groups:read",
+      "users:read",
+      "users:read.email",
+      "reactions:write",
+      "channels:manage"
+    ]
+  },
+  "properties": {
+    "account": {
+      "label": "Slack workspace",
+      "type": "connection",
+      "provider": "slack",
+      "required": true,
+      "description": "Which Slack account this step acts as",
+      "group": "Account"
+    },
+    "channel": {
+      "label": "Channel id",
+      "type": "string",
+      "required": true,
+      "group": "Message"
+    },
+    "timestamp": {
+      "label": "Message timestamp",
+      "type": "string",
+      "required": true,
+      "group": "Message"
+    },
+    "name": {
+      "label": "Emoji",
+      "type": "string",
+      "required": true,
+      "description": "The name without colons, e.g. thumbsup",
+      "group": "Message"
+    }
+  },
+  "inputs": [
+    "input"
+  ],
+  "outputs": [
+    "success",
+    "error"
+  ],
+  "outputFields": {
+    "added": {
+      "type": "true/false",
+      "description": "Whether Slack accepted it"
+    },
+    "name": {
+      "type": "text",
+      "description": "The emoji used"
+    },
+    "timestamp": {
+      "type": "text",
+      "description": "The message it went on"
+    }
+  },
+  "action": {
+    "connection": "account",
+    "request": {
+      "method": "POST",
+      "path": "reactions.add",
+      "body": {
+        "channel": "{{config.channel}}",
+        "timestamp": "{{config.timestamp}}",
+        "name": "{{config.name}}"
+      }
+    },
+    "okPath": "ok",
+    "errorPath": "error",
+    "outputs": {
+      "added": true,
+      "name": "{{config.name}}",
+      "timestamp": "{{config.timestamp}}"
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "config": {
+    "folder": "examples"
+  },
+  "input": {
+    "hello": "storage"
+  },
+  "expectOutput": "success"
+}

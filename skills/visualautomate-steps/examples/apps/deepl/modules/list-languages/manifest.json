@@ -1,0 +1,75 @@
+{
+  "description": "List the languages DeepL translates into",
+  "icon": "list",
+  "color": "#0f2b46",
+  "timeoutMs": 30000,
+  "version": 1,
+  "auth": {
+    "type": "none"
+  },
+  "inputs": [
+    "input"
+  ],
+  "outputs": [
+    "success",
+    "error"
+  ],
+  "properties": {
+    "apiKey": {
+      "label": "DeepL API key",
+      "type": "secret",
+      "required": true,
+      "group": "Account",
+      "description": "From your DeepL account, under API keys"
+    },
+    "host": {
+      "label": "Plan",
+      "type": "select",
+      "default": "api-free.deepl.com",
+      "group": "Account",
+      "description": "Free keys end in :fx and use the free API",
+      "options": [
+        {
+          "label": "DeepL API Free",
+          "value": "api-free.deepl.com"
+        },
+        {
+          "label": "DeepL API Pro",
+          "value": "api.deepl.com"
+        }
+      ]
+    }
+  },
+  "outputFields": {
+    "items": {
+      "type": "list",
+      "description": "One entry per language: code and name"
+    },
+    "count": {
+      "type": "number",
+      "description": "How many there are"
+    }
+  },
+  "action": {
+    "baseUrl": "https://{{config.host}}/v2",
+    "request": {
+      "method": "GET",
+      "path": "languages",
+      "headers": {
+        "Authorization": "DeepL-Auth-Key {{config.apiKey}}"
+      },
+      "query": {
+        "type": "target"
+      }
+    },
+    "errorPath": "message",
+    "outputs": {
+      "code": "{{item.language}}",
+      "name": "{{item.name}}"
+    },
+    "items": {
+      "path": "",
+      "limit": 200
+    }
+  }
+}

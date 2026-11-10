@@ -1,0 +1,4 @@
+# Check every text file out with LF, on Windows too: the skill's SKILL.md
+# frontmatter, the generated blocks in references/sandbox.md and the test
+# fixtures are compared byte for byte.
+* text=auto eol=lf

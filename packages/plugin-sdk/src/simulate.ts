@@ -26,6 +26,8 @@ import type {
     StorageListResult,
     StorageResult,
 } from "./types"
+import { SIGNED_URL_SECONDS, STATE_LIMITS, PUSH_CHECK } from "./platform-rules"
+import { executeOf } from "./runtime"
 
 /** A file held in memory, as the local storage keeps it. */
 interface LocalFile {
@@ -103,8 +105,14 @@ export function createLocalStorage(seed: Record<string, Uint8Array | string> = {
             const file = files.get(path)
             return file ? { size: file.bytes.length, contentType: file.contentType } : null
         },
-        async signedUrl(path) {
-            return files.has(path) ? `memory://${path}` : null
+        async signedUrl(path, seconds) {
+            // The platform's clamp, so a test that asks for a day learns it gets an hour.
+            const valid = Math.min(Math.max(Number(seconds) || SIGNED_URL_SECONDS.default, SIGNED_URL_SECONDS.min), SIGNED_URL_SECONDS.max)
+            return files.has(path) ? `memory://${path}?expires=${valid}` : null
+        },
+        async shareUrl(path, seconds) {
+            const valid = Number(seconds) || SIGNED_URL_SECONDS.default
+            return files.has(path) ? `memory://share/${path}?expires=${valid}` : null
         },
         /**
          * Really fetches, because that is the only way to find out whether the
@@ -133,22 +141,54 @@ export function createLocalState(seed: Record<string, unknown> = {}): {
     values: Map<string, unknown>
 } {
     const values = new Map<string, unknown>(Object.entries(seed))
+    const expiries = new Map<string, number>()
+    const expired = (key: string) => {
+        const at = expiries.get(key)
+        if (at === undefined || at > Date.now()) return false
+        values.delete(key)
+        expiries.delete(key)
+        return true
+    }
     const state: PluginState = {
         async get(key) {
             // `null` for a key that was never set, matching the real one. A
             // plugin that treats `undefined` and `null` differently should find
             // out here rather than on somebody's canvas.
+            if (expired(key)) return null
             return values.has(key) ? values.get(key) : null
         },
-        async set(key, value) {
-            values.set(key, value)
+        async set(key, value, options) {
+            // The store's own limits, so a value that is too big or a TTL that is
+            // too short fails here as it fails there.
+            const encoded = JSON.stringify(value)
+            if (encoded === undefined) throw new Error(`state.set("${key}"): the value must be JSON-serialisable.`)
+            const bytes = new TextEncoder().encode(encoded).length
+            if (bytes > STATE_LIMITS.maxValueBytes) {
+                throw new Error(
+                    `state.set("${key}"): the value is ${Math.ceil(bytes / 1024)} KB once encoded, and a value may be at most `
+                    + `${STATE_LIMITS.maxValueBytes / 1024} KB. Put large data in storage and keep its path here.`,
+                )
+            }
+            const ttl = options?.ttlSeconds
+            if (ttl !== undefined && (typeof ttl !== "number" || ttl < STATE_LIMITS.minTtlSeconds)) {
+                throw new Error(`state.set("${key}"): ttlSeconds must be at least ${STATE_LIMITS.minTtlSeconds}.`)
+            }
+            values.set(key, JSON.parse(encoded))
+            if (ttl !== undefined) expiries.set(key, Date.now() + ttl * 1000)
+            else expiries.delete(key)
         },
         async delete(key) {
             values.delete(key)
+            expiries.delete(key)
         },
         async list(prefix) {
-            const keys = [...values.keys()].filter((k) => !prefix || k.startsWith(prefix))
-            return { keys }
+            const keys = [...values.keys()]
+                .filter((key) => !expired(key) && (!prefix || key.startsWith(prefix)))
+                .map((key) => {
+                    const at = expiries.get(key)
+                    return { key, expiresAt: at === undefined ? null : new Date(at).toISOString() }
+                })
+            return { keys, complete: true }
         },
     }
     return { state, values }
@@ -214,7 +254,7 @@ export async function simulate(
 ): Promise<SimulateResult> {
     const startTime = Date.now()
 
-    const execute = typeof plugin === "function" ? plugin : plugin?.execute
+    const execute = executeOf(plugin)
     const { storage, files } = createLocalStorage(options.storage)
     const { state, values } = createLocalState(options.state)
 
@@ -223,8 +263,8 @@ export async function simulate(
             status: "error",
             output: null,
             error:
-                "This module exports no execute function. A plugin is `export default { execute }`, "
-                + "`module.exports.execute = …`, or a default export that is the function itself.",
+                "Plugin must export an execute function: `module.exports = { execute }`, "
+                + "`module.exports.execute = …`, or a function as `module.exports` or `module.exports.default`.",
             durationMs: Date.now() - startTime,
             files,
             state: values,
@@ -240,12 +280,10 @@ export async function simulate(
         secrets: options.secrets ?? {},
         storage,
         state,
-        connections:
-            options.connections ??
-            ({
-                get: async () =>
-                    absent("connections", "It reaches an account somebody connected on the platform."),
-            } as PluginConnections),
+        // Absent unless a stub is given, as on the platform when no account was
+        // chosen for the step: the push check runs a step with only the accounts
+        // its test file names, and none can be named here.
+        connections: options.connections,
         media:
             options.media ??
             ({
@@ -253,7 +291,7 @@ export async function simulate(
             } as PluginMedia),
     }
 
-    const timeoutMs = options.timeoutMs ?? 30_000
+    const timeoutMs = options.timeoutMs ?? PUSH_CHECK.defaultTimeoutMs
     let timer: ReturnType<typeof setTimeout> | undefined
     const timeout = new Promise<never>((_, reject) => {
         timer = setTimeout(
@@ -309,7 +347,12 @@ export async function simulate(
         }
     } catch (error) {
         const durationMs = Date.now() - startTime
-        const message = error instanceof Error ? error.message : String(error)
+        // Read as the platform reads it, by duck typing: an error thrown inside a
+        // step's own context is not an instance of this realm's Error.
+        const message =
+            error && typeof error === "object" && typeof (error as { message?: unknown }).message === "string"
+                ? (error as { message: string }).message
+                : String(error)
         return {
             status: message.includes("timed out") ? "timeout" : "error",
             output: null,

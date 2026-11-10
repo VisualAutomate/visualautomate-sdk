@@ -1,0 +1,8 @@
+{
+  "config": {
+    "text": "Hello.\n\nThis is the second paragraph.",
+    "targetLang": "DE"
+  },
+  "input": {},
+  "expectOutput": "error"
+}

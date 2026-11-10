@@ -1,0 +1,7 @@
+{
+  "config": {},
+  "input": {
+    "score": 91
+  },
+  "expectOutput": "high"
+}

@@ -1,0 +1,28 @@
+{
+  "description": "Sorts a score into high, medium or low",
+  "icon": "split",
+  "properties": {
+    "highFrom": {
+      "label": "High from",
+      "type": "number",
+      "default": 80
+    },
+    "mediumFrom": {
+      "label": "Medium from",
+      "type": "number",
+      "default": 50
+    }
+  },
+  "inputs": [
+    "input"
+  ],
+  "outputs": [
+    "high",
+    "medium",
+    "low",
+    "error"
+  ],
+  "outputFields": {
+    "score": "The score that was sorted"
+  }
+}

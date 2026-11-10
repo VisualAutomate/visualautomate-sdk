@@ -1,0 +1,22 @@
+{
+  "description": "Lets each item through once",
+  "icon": "database",
+  "properties": {
+    "key": {
+      "label": "Remember under",
+      "type": "string",
+      "default": "seen-ids"
+    }
+  },
+  "inputs": [
+    "input"
+  ],
+  "outputs": [
+    "new",
+    "duplicate",
+    "error"
+  ],
+  "outputFields": {
+    "id": "The item's id"
+  }
+}

@@ -1,0 +1,103 @@
+{
+  "description": "Post a message to a channel, a private channel or a direct message",
+  "icon": "send",
+  "color": "#4a154b",
+  "timeoutMs": 30000,
+  "version": 1,
+  "auth": {
+    "type": "oauth2",
+    "provider": "slack",
+    "scopes": [
+      "chat:write",
+      "channels:read",
+      "channels:history",
+      "groups:read",
+      "users:read",
+      "users:read.email",
+      "reactions:write",
+      "channels:manage"
+    ]
+  },
+  "properties": {
+    "account": {
+      "label": "Slack workspace",
+      "type": "connection",
+      "provider": "slack",
+      "required": true,
+      "description": "Which Slack account this step acts as",
+      "group": "Account"
+    },
+    "channel": {
+      "label": "Channel id",
+      "type": "string",
+      "required": true,
+      "description": "The channel to post in, e.g. C0123456789. Use List channels to find one.",
+      "group": "Message"
+    },
+    "text": {
+      "label": "Message",
+      "type": "string",
+      "required": true,
+      "description": "The text to post. Slack's mrkdwn is understood.",
+      "group": "Message"
+    },
+    "thread_ts": {
+      "label": "Reply to",
+      "type": "string",
+      "description": "The ts of a message to reply to, leaving this one in its thread",
+      "group": "Message"
+    },
+    "unfurl_links": {
+      "label": "Show link previews",
+      "type": "boolean",
+      "default": true,
+      "group": "Message"
+    }
+  },
+  "inputs": [
+    "input"
+  ],
+  "outputs": [
+    "success",
+    "error"
+  ],
+  "outputFields": {
+    "ts": {
+      "type": "text",
+      "description": "The message's timestamp, which is its id in every other method"
+    },
+    "channel": {
+      "type": "text",
+      "description": "The channel it was posted in"
+    },
+    "text": {
+      "type": "text",
+      "description": "What was sent"
+    },
+    "permalink": {
+      "type": "text",
+      "description": "A link to the message, when Slack returns one"
+    }
+  },
+  "action": {
+    "connection": "account",
+    "request": {
+      "method": "POST",
+      "path": "chat.postMessage",
+      "body": {
+        "channel": "{{config.channel}}",
+        "text": "{{config.text}}",
+        "thread_ts": "{{config.thread_ts}}",
+        "unfurl_links": "{{config.unfurl_links}}"
+      }
+    },
+    "okPath": "ok",
+    "errorPath": "error",
+    "outputs": {
+      "ts": "{{response.ts}}",
+      "channel": "{{response.channel}}",
+      "text": "{{config.text}}",
+      "permalink": "{{response.message.permalink}}"
+    }
+  }
+}

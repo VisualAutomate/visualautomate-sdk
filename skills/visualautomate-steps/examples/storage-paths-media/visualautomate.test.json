@@ -1,0 +1,7 @@
+{
+  "config": {
+    "source": "examples/missing.mp4"
+  },
+  "input": {},
+  "expectOutput": "error"
+}

@@ -59,7 +59,10 @@ export interface StorageListResult {
  * ceiling is refused rather than silently dropped.
  */
 export interface PluginStorage {
-    /** Write a file. Bytes may be a string, a Buffer or any typed array. */
+    /**
+     * Write a file. Bytes are a string or a Uint8Array: there is no `Buffer` in a
+     * step's context.
+     */
     put(path: string, data: Uint8Array | string, contentType?: string): Promise<StorageResult>
     /** Read a file back. `null` when it is not there. */
     get(path: string): Promise<Uint8Array | null>
@@ -75,6 +78,13 @@ export interface PluginStorage {
      * to between one minute and one hour; the default is fifteen minutes.
      */
     signedUrl(path: string, expiresInSeconds?: number): Promise<string | null>
+    /**
+     * A link on VisualAutomate's own domain that opens the file, for somebody
+     * with no account: a mail, a message, a page. The storage bucket's own
+     * address (signedUrl) is right for an API that fetches the file; this one is
+     * right for a person. Fifteen minutes unless `expiresInSeconds` says otherwise.
+     */
+    shareUrl(path: string, expiresInSeconds?: number): Promise<string | null>
     /**
      * Pull a URL straight into storage without the bytes passing through this
      * step. A hundred-megabyte file costs the run no memory and no egress,
@@ -96,11 +106,19 @@ export interface PluginStorage {
  * The account's plan caps how many keys it may hold.
  */
 export interface PluginState {
-    /** The stored value, or `null` when the key has never been set. */
+    /** The stored value, or `null` when the key has never been set or has expired. */
     get(key: string): Promise<unknown>
+    /**
+     * Store a JSON value, at most 128 KB once encoded. With `ttlSeconds`, which
+     * must be at least 60, it is forgotten after that many seconds.
+     */
     set(key: string, value: unknown, options?: { ttlSeconds?: number }): Promise<void>
     delete(key: string): Promise<void>
-    list(prefix?: string): Promise<{ keys: string[] }>
+    /**
+     * The keys under a prefix, each with when it expires (`null` for never).
+     * `complete` is false when there were more than one call returns.
+     */
+    list(prefix?: string): Promise<{ keys: Array<{ key: string; expiresAt: string | null }>; complete: boolean }>
 }
 
 // ─── context.media ──────────────────────────────────────────────────────────
@@ -303,6 +321,13 @@ export type PluginPropertyType =
      * saved as the number five and the step would run nothing.
      */
     | "code"
+    /**
+     * A key the user types in: an API key, a token. A string to your code and to
+     * a declared call (`Bearer {{config.apiKey}}`), and masked wherever it is
+     * shown, because it is the one value on a step that somebody looking over a
+     * shoulder must not be able to read off.
+     */
+    | "secret"
     | "color"
     | "date"
     /** An account the user connected. Rendered as a picker, not a text box. */
@@ -341,6 +366,43 @@ export interface PluginProperty {
      * `outlook`. A module inherits its app's, so it does not repeat this.
      */
     provider?: string
+    /** Longer help, shown on request rather than under the input. */
+    help?: string
+    /** Shown but not editable. */
+    disabled?: boolean
+    /**
+     * For `select` and `multiselect`: read the options from the user's account
+     * instead of listing them, e.g. the channels of the chosen Slack workspace.
+     */
+    optionsFrom?: OptionsSource
+    /**
+     * For `secret`: the properties that say where this secret is sent, such as
+     * a server URL. A stored secret is only kept when those are unchanged, so
+     * pointing the URL somewhere else cannot carry the key along.
+     */
+    sentTo?: string[]
+    /**
+     * For `secret`: the value is sent exactly as typed and never computed with,
+     * which lets the platform keep it out of the step's code entirely.
+     */
+    verbatim?: boolean
+}
+
+/**
+ * Where a select's options come from: one GET as the account in `connection`,
+ * a list in the answer, and what each option shows and stores.
+ */
+export interface OptionsSource {
+    /** The `connection` property whose account the options are read as. */
+    connection: string
+    request: { path: string; query?: Record<string, unknown>; headers?: Record<string, string> }
+    /** Where the list is in the answer (`""` when the answer is the list), and how many to offer. */
+    items: { path: string; limit?: number }
+    paginate?: Record<string, unknown>
+    /** What each option shows, e.g. `{{item.name}}`. */
+    label: string
+    /** What choosing it stores, e.g. `{{item.id}}`. */
+    value: string
 }
 
 /**

@@ -1,0 +1,67 @@
+{
+  "description": "Gets the current weather for a city",
+  "icon": "cloud-sun",
+  "auth": {
+    "type": "none"
+  },
+  "properties": {
+    "apiKey": {
+      "label": "API key",
+      "type": "secret",
+      "required": true,
+      "description": "From your account on the weather service"
+    },
+    "city": {
+      "label": "City",
+      "type": "string",
+      "required": true
+    },
+    "units": {
+      "label": "Units",
+      "type": "select",
+      "default": "metric",
+      "options": [
+        {
+          "label": "Celsius",
+          "value": "metric"
+        },
+        {
+          "label": "Fahrenheit",
+          "value": "imperial"
+        }
+      ]
+    }
+  },
+  "inputs": [
+    "input"
+  ],
+  "outputs": [
+    "success",
+    "error"
+  ],
+  "outputFields": {
+    "temperature": "The temperature now",
+    "summary": "The weather in words",
+    "city": "The city it is for"
+  },
+  "action": {
+    "baseUrl": "https://api.example.com/v1",
+    "request": {
+      "method": "GET",
+      "path": "weather",
+      "query": {
+        "q": "{{config.city}}",
+        "units": "{{config.units}}"
+      },
+      "headers": {
+        "Authorization": "Bearer {{config.apiKey}}"
+      }
+    },
+    "errorPath": "error.message",
+    "outputs": {
+      "temperature": "{{response.current.temp}}",
+      "summary": "{{response.current.summary}}",
+      "city": "{{config.city}}"
+    }
+  }
+}

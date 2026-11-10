@@ -24,7 +24,11 @@ export interface Target {
     /** How it is named in the output: the module folder, or the directory. */
     name: string
     dir: string
-    entry: string
+    /**
+     * The code, or null for a step that is only a manifest: a declared step (an
+     * `action` block) or a trigger, which `test` checks rather than runs.
+     */
+    entry: string | null
     /** Loaded as written, the way the platform loads a repository's index.js. */
     raw: boolean
 }
@@ -54,7 +58,8 @@ export function findTargets(cwd: string, only?: string): Target[] {
     const dir = resolve(cwd)
     const modulesDir = join(dir, "modules")
 
-    if (!entryIn(dir) && existsSync(modulesDir) && statSync(modulesDir).isDirectory()) {
+    const stepHere = Boolean(entryIn(dir)) || existsSync(join(dir, "manifest.json"))
+    if (!stepHere && existsSync(modulesDir) && statSync(modulesDir).isDirectory()) {
         const folders = readdirSync(modulesDir, { withFileTypes: true })
             .filter((d) => d.isDirectory() && existsSync(join(modulesDir, d.name, "manifest.json")))
             .map((d) => d.name)
@@ -72,7 +77,7 @@ export function findTargets(cwd: string, only?: string): Target[] {
     const target = targetIn(dir, basename(dir))
     if (!target) {
         throw new Error(
-            "Nothing to test here: no plugin.ts, plugin.js or index.js, and no modules/ folder.\n"
+            "Nothing to test here: no manifest.json, no plugin.ts, plugin.js or index.js, and no modules/ folder.\n"
             + "Run this in a module's folder, at the root of its repository, or run `vsa init <name>`.",
         )
     }
@@ -81,7 +86,7 @@ export function findTargets(cwd: string, only?: string): Target[] {
 
 function targetIn(dir: string, name: string): Target | null {
     const entry = entryIn(dir)
-    if (!entry) return null
+    if (!entry) return existsSync(join(dir, "manifest.json")) ? { name, dir, entry: null, raw: true } : null
     const raw = basename(entry) === "index.js" && !existsSync(join(dir, "plugin.json"))
     return { name, dir, entry, raw }
 }

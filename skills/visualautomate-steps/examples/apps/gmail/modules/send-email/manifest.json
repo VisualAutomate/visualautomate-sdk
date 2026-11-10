@@ -1,0 +1,76 @@
+{
+  "description": "Send an email from the connected Gmail account",
+  "icon": "send",
+  "color": "#ea4335",
+  "timeoutMs": 30000,
+  "version": 1,
+  "auth": {
+    "type": "oauth2",
+    "provider": "google-mail",
+    "scopes": [
+      "https://www.googleapis.com/auth/gmail.modify"
+    ]
+  },
+  "properties": {
+    "account": {
+      "label": "Google account",
+      "type": "connection",
+      "provider": "google-mail",
+      "required": true,
+      "description": "Which Gmail account this step acts as",
+      "group": "Account"
+    },
+    "to": {
+      "label": "To",
+      "type": "string",
+      "required": true,
+      "description": "Addresses, separated by commas",
+      "group": "Message"
+    },
+    "cc": {
+      "label": "Cc",
+      "type": "string",
+      "description": "Addresses, separated by commas",
+      "group": "Message"
+    },
+    "subject": {
+      "label": "Subject",
+      "type": "string",
+      "required": true,
+      "group": "Message"
+    },
+    "body": {
+      "label": "Message",
+      "type": "string",
+      "required": true,
+      "group": "Message"
+    },
+    "isHtml": {
+      "label": "Send as HTML",
+      "type": "boolean",
+      "default": false,
+      "group": "Message"
+    }
+  },
+  "inputs": [
+    "input"
+  ],
+  "outputs": [
+    "success",
+    "error"
+  ],
+  "outputFields": {
+    "id": {
+      "type": "text",
+      "description": "The sent message's id"
+    },
+    "threadId": {
+      "type": "text",
+      "description": "The conversation it belongs to"
+    },
+    "to": {
+      "type": "list",
+      "description": "Who it went to"
+    }
+  }
+}

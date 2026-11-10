@@ -1,0 +1,109 @@
+{
+  "description": "List the channels in the workspace, with their ids",
+  "icon": "list",
+  "color": "#4a154b",
+  "timeoutMs": 30000,
+  "version": 1,
+  "auth": {
+    "type": "oauth2",
+    "provider": "slack",
+    "scopes": [
+      "chat:write",
+      "channels:read",
+      "channels:history",
+      "groups:read",
+      "users:read",
+      "users:read.email",
+      "reactions:write",
+      "channels:manage"
+    ]
+  },
+  "properties": {
+    "account": {
+      "label": "Slack workspace",
+      "type": "connection",
+      "provider": "slack",
+      "required": true,
+      "description": "Which Slack account this step acts as",
+      "group": "Account"
+    },
+    "types": {
+      "label": "Kinds",
+      "type": "select",
+      "default": "public_channel",
+      "options": [
+        {
+          "label": "Public channels",
+          "value": "public_channel"
+        },
+        {
+          "label": "Private channels",
+          "value": "private_channel"
+        },
+        {
+          "label": "Public and private",
+          "value": "public_channel,private_channel"
+        },
+        {
+          "label": "Direct messages",
+          "value": "im"
+        }
+      ],
+      "group": "Search"
+    },
+    "limit": {
+      "label": "How many",
+      "type": "number",
+      "default": 100,
+      "min": 1,
+      "max": 1000,
+      "group": "Search"
+    },
+    "exclude_archived": {
+      "label": "Skip archived",
+      "type": "boolean",
+      "default": true,
+      "group": "Search"
+    }
+  },
+  "inputs": [
+    "input"
+  ],
+  "outputs": [
+    "success",
+    "error"
+  ],
+  "outputFields": {
+    "channels": {
+      "type": "list",
+      "description": "The channels, each with an id and a name"
+    },
+    "count": {
+      "type": "number",
+      "description": "How many came back"
+    },
+    "cursor": {
+      "type": "text",
+      "description": "Slack's cursor for the next page, when there is one"
+    }
+  },
+  "action": {
+    "connection": "account",
+    "request": {
+      "method": "GET",
+      "path": "conversations.list",
+      "query": {
+        "types": "{{config.types}}",
+        "limit": "{{config.limit}}",
+        "exclude_archived": "{{config.exclude_archived}}"
+      }
+    },
+    "okPath": "ok",
+    "errorPath": "error",
+    "outputs": {
+      "channels": "{{response.channels}}",
+      "count": "{{response.channels | length}}",
+      "cursor": "{{response.response_metadata.next_cursor}}"
+    }
+  }
+}

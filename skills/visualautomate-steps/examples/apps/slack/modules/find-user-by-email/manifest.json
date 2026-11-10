@@ -1,0 +1,75 @@
+{
+  "description": "Look up a member of the workspace by their address",
+  "icon": "search",
+  "color": "#4a154b",
+  "timeoutMs": 30000,
+  "version": 1,
+  "auth": {
+    "type": "oauth2",
+    "provider": "slack",
+    "scopes": [
+      "chat:write",
+      "channels:read",
+      "channels:history",
+      "groups:read",
+      "users:read",
+      "users:read.email",
+      "reactions:write",
+      "channels:manage"
+    ]
+  },
+  "properties": {
+    "account": {
+      "label": "Slack workspace",
+      "type": "connection",
+      "provider": "slack",
+      "required": true,
+      "description": "Which Slack account this step acts as",
+      "group": "Account"
+    },
+    "email": {
+      "label": "Email",
+      "type": "string",
+      "required": true,
+      "group": "Search"
+    }
+  },
+  "inputs": [
+    "input"
+  ],
+  "outputs": [
+    "success",
+    "error"
+  ],
+  "outputFields": {
+    "id": {
+      "type": "text",
+      "description": "Their user id, which every other method wants"
+    },
+    "name": {
+      "type": "text",
+      "description": "Their display name"
+    },
+    "email": {
+      "type": "text",
+      "description": "The address that was looked up"
+    }
+  },
+  "action": {
+    "connection": "account",
+    "request": {
+      "method": "GET",
+      "path": "users.lookupByEmail",
+      "query": {
+        "email": "{{config.email}}"
+      }
+    },
+    "okPath": "ok",
+    "errorPath": "error",
+    "outputs": {
+      "id": "{{response.user.id}}",
+      "name": "{{response.user.real_name}}",
+      "email": "{{config.email}}"
+    }
+  }
+}

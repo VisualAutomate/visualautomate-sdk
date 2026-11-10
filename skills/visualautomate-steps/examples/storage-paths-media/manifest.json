@@ -1,0 +1,40 @@
+{
+  "description": "Trims a stored video",
+  "icon": "film",
+  "timeoutMs": 60000,
+  "properties": {
+    "source": {
+      "label": "Video",
+      "type": "path",
+      "required": true,
+      "description": "A video already in storage"
+    },
+    "start": {
+      "label": "Start (s)",
+      "type": "number",
+      "default": 0,
+      "min": 0
+    },
+    "duration": {
+      "label": "Length (s)",
+      "type": "number",
+      "default": 10,
+      "min": 1
+    },
+    "extras": {
+      "label": "Other files",
+      "type": "paths",
+      "description": "One per line; only listed, not read"
+    }
+  },
+  "inputs": [
+    "input"
+  ],
+  "outputs": [
+    "success",
+    "error"
+  ],
+  "outputFields": {
+    "output": "Where the trimmed video was saved"
+  }
+}

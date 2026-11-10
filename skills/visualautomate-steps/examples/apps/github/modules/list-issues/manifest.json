@@ -1,0 +1,111 @@
+{
+  "description": "List a repository's issues, newest first",
+  "icon": "list",
+  "color": "#24292f",
+  "timeoutMs": 30000,
+  "version": 1,
+  "auth": {
+    "type": "oauth2",
+    "provider": "github",
+    "scopes": [
+      "repo"
+    ]
+  },
+  "properties": {
+    "account": {
+      "label": "GitHub account",
+      "type": "connection",
+      "provider": "github",
+      "required": true,
+      "description": "Which GitHub account this step acts as",
+      "group": "Account"
+    },
+    "owner": {
+      "label": "Owner",
+      "type": "string",
+      "required": true,
+      "group": "Repository"
+    },
+    "repo": {
+      "label": "Repository",
+      "type": "string",
+      "required": true,
+      "group": "Repository"
+    },
+    "state": {
+      "label": "State",
+      "type": "select",
+      "default": "open",
+      "options": [
+        {
+          "label": "Open",
+          "value": "open"
+        },
+        {
+          "label": "Closed",
+          "value": "closed"
+        },
+        {
+          "label": "Both",
+          "value": "all"
+        }
+      ],
+      "group": "Search"
+    },
+    "labels": {
+      "label": "Labels",
+      "type": "string",
+      "description": "Only issues with all of these, separated by commas",
+      "group": "Search"
+    },
+    "per_page": {
+      "label": "How many",
+      "type": "number",
+      "default": 30,
+      "min": 1,
+      "max": 100,
+      "group": "Search"
+    }
+  },
+  "inputs": [
+    "input"
+  ],
+  "outputs": [
+    "success",
+    "error"
+  ],
+  "outputFields": {
+    "issues": {
+      "type": "list",
+      "description": "The issues, each with a number, a title and a state",
+      "fields": {
+        "number": "number",
+        "title": "text",
+        "body": "object",
+        "state": "text",
+        "html_url": "text"
+      }
+    },
+    "count": {
+      "type": "number",
+      "description": "How many came back"
+    }
+  },
+  "action": {
+    "connection": "account",
+    "request": {
+      "method": "GET",
+      "path": "repos/{{config.owner}}/{{config.repo}}/issues",
+      "query": {
+        "state": "{{config.state}}",
+        "labels": "{{config.labels}}",
+        "per_page": "{{config.per_page}}"
+      }
+    },
+    "errorPath": "message",
+    "outputs": {
+      "issues": "{{response}}",
+      "count": "{{response | length}}"
+    }
+  }
+}

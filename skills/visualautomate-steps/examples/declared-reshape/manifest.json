@@ -1,0 +1,34 @@
+{
+  "description": "Turns a comma-separated list of addresses into a list",
+  "icon": "list",
+  "auth": {
+    "type": "none"
+  },
+  "properties": {
+    "addresses": {
+      "label": "Addresses",
+      "type": "string",
+      "required": true,
+      "description": "Separated by commas"
+    }
+  },
+  "inputs": [
+    "input"
+  ],
+  "outputs": [
+    "success",
+    "error"
+  ],
+  "outputFields": {
+    "recipients": "The addresses, as a list",
+    "first": "The first address",
+    "count": "How many there are"
+  },
+  "action": {
+    "outputs": {
+      "recipients": "{{config.addresses | list}}",
+      "first": "{{config.addresses | first}}",
+      "count": "{{config.addresses | length}}"
+    }
+  }
+}

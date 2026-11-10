@@ -30,6 +30,7 @@ plugin.json          name, version, description, category
 test.json            the input, config, storage and state `test` runs with
 visualautomate.d.ts  the types, written in rather than installed
 tsconfig.json        so your editor type-checks it
+AGENTS.md, CLAUDE.md the platform's rules, for an AI assistant working here
 ```
 
 Templates: `blank`, `http-request`, `connection`, `file`. Pass one with
@@ -57,6 +58,26 @@ repository they go at the root, where they cover every module. Nothing is
 installed, nothing of it exists while your plugin runs, and a file you wrote
 yourself is never written over — delete ours and it comes back.
 
+## `skill`
+
+The guide an AI assistant reads to build steps for you: describe a step in a sentence ("a step that
+creates an invoice in Moneybird") and the assistant writes the manifest, the code and the test file,
+runs `vsa test`, and tells you how to publish it.
+
+```bash
+vsa skill            # .claude/skills/visualautomate-steps in this project, plus AGENTS.md and CLAUDE.md
+vsa skill --global   # ~/.claude/skills/visualautomate-steps, for every project
+vsa skill --dir out  # the skill's folder anywhere, e.g. to zip and upload to Claude on the web
+```
+
+Claude Code finds the skill on its own. `AGENTS.md` is read by Cursor, Copilot, Codex and others;
+`CLAUDE.md` is one line that pulls it in for Claude Code. Both carry the platform's rules: no `import`,
+only allowed packages, never a credential, `{ output, data }`. `vsa init` writes them into every new
+project as well.
+
+Running it again brings the files up to date with this CLI. An `AGENTS.md` or `CLAUDE.md` you wrote
+yourself is never written over: ours starts with a marker line, and a file without it is left alone.
+
 ## `add:property`
 
 A field on the node — what somebody fills in when they drop your module into a
@@ -73,8 +94,8 @@ vsa add:property select mode "Which way round" fast --options "Fast:fast,Thoroug
 and the default is stored as its type has it, so `2` is a number and `false` is a
 boolean.
 
-Types: `string`, `number`, `boolean`, `select`, `multiselect`, `json`, `color`,
-`date`, `connection`, `file`, `path`, `paths`. A `select` or `multiselect` needs
+Types: `string`, `number`, `boolean`, `select`, `multiselect`, `json`, `code`,
+`secret`, `color`, `date`, `connection`, `file`, `path`, `paths`. A `select` or `multiselect` needs
 `--options`, and a `connection` needs `--provider <name>`.
 
 The same field is added to `visualautomate.test.json` under `config`, with its
@@ -87,8 +108,15 @@ comments, the examples underneath and your own formatting stay as they are.
 
 ## `test`
 
-Runs your plugin the way the platform would, in three steps:
+The developer portal's check on a push, run here. In order:
 
+0. **The manifest.** The rules the portal is known to refuse, and warnings for
+   what it would drop: an `auth` that names a host, an `action` with both a
+   connection and a `baseUrl`, a request path that is a full URL, a trigger
+   without `items` or without `"initial": "now"`. A declared step (an `action`
+   block) or a trigger stops here, checked: the platform does not run those on a
+   push either. A declared step is published from the portal, not GitHub: New
+   module → Call an API, paste its manifest.json, Try it, publish.
 1. **The platform's code checks.** The same rules the upload applies: only
    allowed packages in `require`, no dynamic `require`, none of the refused
    patterns (`eval`, `process.env`, `import`, …). Code that fails here would be
@@ -97,19 +125,35 @@ Runs your plugin the way the platform would, in three steps:
    else — no `fs`, no `http`. Those packages are installed in the sandbox; here
    they come from your project, and a missing one prints the `npm install`
    command for the version the sandbox has.
-3. **A context that behaves.** `storage` and `state` are real, in memory, and
+3. **The runner's way of loading code.** In a `vm` context of its own, with the
+   platform's globals and no others: `fetch`, `btoa`, `TextEncoder`, `Blob`,
+   `FormData` and the rest, but no `Buffer`, `process`, `globalThis` or
+   `structuredClone`, and a `console` with `log`, `error`, `warn` and `info`. A
+   step that leans on something Node has and the platform does not fails here.
+4. **A context that behaves.** `storage` and `state` are real, in memory, with
+   the store's limits (a value at most 128 KB, `ttlSeconds` at least 60), and
    the result shows what the step left behind:
 
 ```
 ✓ passed  success, 3ms
-output   success (expected success)
+output   success (expected success, the default)
 data     { "path": "notes/hello-shouted.txt", "size": 17 }
 files    notes/hello.txt, notes/hello-shouted.txt
 state    {"runs":1}
 ```
 
-A run passes when it succeeds and, if the test file names an `expectOutput`,
-leaves by that port — the same verdict as the GitHub check.
+A run passes when it succeeds and leaves by the test file's `expectOutput`, or by
+`success` when it names none, within manifest.json's `timeoutMs` (30 seconds when
+it names none): the same verdict as the GitHub check.
+
+**Publishing needs a run on success.** The portal publishes only code whose push
+test came back on `success`. A test that expects `error` passes, and `vsa test`
+says it does not count. For a step that acts as an account, name one of your
+connected accounts in the test file's `config`, under the property's name: the
+push check then acts as it. The module's page on the portal lists the ids.
+
+`vsa test` runs on this machine's Node and says so when that is not the
+platform's (Node 24); `vsa test --docker` and `vsa dev` run on the platform's.
 
 The verdict is green when it passed and red when it did not, in the sandbox as
 well as out here. `NO_COLOR` turns that off, and output that is not a terminal —
@@ -156,8 +200,9 @@ runs them all. Ctrl+C stops it.
 
 `context.connections` and `context.media` are **not** simulated. One is
 somebody's OAuth account and the other is an ffmpeg container; pretending to be
-either would produce a plugin that passes here and fails on a canvas. Asking for
-one fails with a sentence saying so.
+either would produce a plugin that passes here and fails on a canvas. There is
+no account here, so `context.connections` is absent, as it is on the platform
+when no account is chosen; `context.media` fails with a sentence saying so.
 
 `visualautomate.test.json` (or `test.json`, or `--input <file>`) seeds the run:
 
@@ -168,20 +213,21 @@ one fails with a sentence saying so.
   "storage": { "notes/hello.txt": "hello from a file" },
   "state": { "runs": 0 },
   "expectOutput": "success",
-  "timeoutMs": 30000,
   "allowedDomains": ["api.example.com"]
 }
 ```
 
-The platform's push check reads `config`, `input`, `expectOutput` and
-`timeoutMs`; `storage`, `state`, `secrets` and `allowedDomains` are for running
-locally. A file that is not valid JSON stops the run rather than running with
+The platform's push check reads `config`, `input` and `expectOutput`; `storage`,
+`state`, `secrets` and `allowedDomains` are for running locally. The time limit
+is manifest.json's `timeoutMs`, not the test file's: `vsa test` warns about a
+`timeoutMs` here, because the push check ignores it. A file that is not valid JSON stops the run rather than running with
 nothing.
 
 ## Where `fetch` may go
 
-On the platform a step may contact the domains its plugin declares, plus any
-host in the configuration filled in for that step. A declared domain covers its
+On the platform a step may contact the hosts allowed for its plugin, which are
+set on the platform rather than declared in the manifest, plus any host in the
+configuration filled in for that step. A declared domain covers its
 subdomains; localhost, private networks and metadata addresses are never
 allowed.
 
@@ -214,10 +260,11 @@ vsa dev --tier boosted
 Your plugin runs inside the plugin sandbox image,
 `ghcr.io/visualautomate/plugin-sandbox`, at the version of this CLI:
 
-- the Node version the platform runs plugins on, with every allowed npm
-  package installed — no `npm install` needed;
-- the CPU and memory of the sandbox tier: `standard` (¼ vCPU, 1 GB, the
-  default), `boosted` (½ vCPU, 4 GB), `high` (1 vCPU, 6 GB), `max` (2 vCPU, 8 GB);
+- Node 24, the version the platform runs plugins on, with every allowed npm
+  package installed at the platform's versions — no `npm install` needed;
+- the CPU and memory of the platform's machine: `standard` (½ vCPU, 4 GB, the
+  default), `boosted` (1 vCPU, 6 GB) or `high` (2 vCPU, 8 GB). `max` is no longer
+  offered and runs as `high`, as on the platform;
 - no Linux capabilities, a read-only filesystem apart from your project and a
   small `/tmp`, and nothing else from your machine.
 
@@ -234,8 +281,10 @@ machine, and each run starts a fresh container.
 
 Not from here. Connect the repository to your app on the portal, push your
 commit, and the platform runs the same checks `vsa test` runs against every
-module it touched. Publish on the portal takes the code from a commit that
-passed, and a version snapshot is saved so you can roll back.
+module it touched. Publish on the portal takes the code from a commit whose test
+came back on `success`, and a version snapshot is saved so you can roll back. A
+declared step is published once a Try it in the portal's editor has passed on
+its saved version.
 
 Comments in `manifest.json` are a convenience of this tool: the file on your
 disk may have them, and they are stripped before the manifest is read.
