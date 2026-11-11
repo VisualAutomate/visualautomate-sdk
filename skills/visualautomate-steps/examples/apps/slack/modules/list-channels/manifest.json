@@ -5,27 +5,15 @@
   "timeoutMs": 30000,
   "version": 1,
   "auth": {
-    "type": "oauth2",
-    "provider": "slack",
-    "scopes": [
-      "chat:write",
-      "channels:read",
-      "channels:history",
-      "groups:read",
-      "users:read",
-      "users:read.email",
-      "reactions:write",
-      "channels:manage"
-    ]
+    "type": "none"
   },
   "properties": {
-    "account": {
-      "label": "Slack workspace",
-      "type": "connection",
-      "provider": "slack",
+    "token": {
+      "label": "Slack bot token",
+      "type": "secret",
       "required": true,
-      "description": "Which Slack account this step acts as",
-      "group": "Account"
+      "group": "Account",
+      "description": "The xoxb- token of your Slack app, installed in the workspace"
     },
     "types": {
       "label": "Kinds",
@@ -88,7 +76,7 @@
     }
   },
   "action": {
-    "connection": "account",
+    "baseUrl": "https://slack.com/api",
     "request": {
       "method": "GET",
       "path": "conversations.list",
@@ -96,6 +84,9 @@
         "types": "{{config.types}}",
         "limit": "{{config.limit}}",
         "exclude_archived": "{{config.exclude_archived}}"
+      },
+      "headers": {
+        "Authorization": "Bearer {{config.token}}"
       }
     },
     "okPath": "ok",

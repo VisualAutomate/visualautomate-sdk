@@ -1,6 +1,6 @@
 # manifest.json
 
-Declares a step: the fields the canvas draws, the ports it leaves by, what it hands on, the account it acts as, and its limits. Strict JSON on the platform (the CLI strips `//` comments in local files). Keys not listed here are dropped when the step is saved.
+Declares a step: the fields the canvas draws, the ports it leaves by, what it hands on, and its limits. Strict JSON on the platform (the CLI strips `//` comments in local files). Keys not listed here are dropped when the step is saved.
 
 ```json
 {
@@ -35,14 +35,13 @@ Declares a step: the fields the canvas draws, the ports it leaves by, what it ha
 | `color` | string | Hex ring colour on the canvas |
 | `version` | number | Bump when the declaration changes shape. Default 1 |
 | `properties` | object | The fields. See below |
-| `inputs` | string[] | Default `["input"]`. A trigger has `[]` |
+| `inputs` | string[] | Default `["input"]` |
 | `outputs` | string[] | Ports. Default `["success", "error"]`. Each is a line a user can draw from |
 | `outputFields` | object | Describes the keys of `data` for the next step's picker: `{ "id": "The new id" }`, or `{ "items": { "type": "list", "description": "..." } }` |
-| `auth` | object | `{ "type": "oauth2" \| "api_key" \| "basic" \| "none", "provider"?: "...", "scopes"?: [...] }` |
+| `auth` | object | `{ "type": "none" }`, or leave it out. The other types (`oauth2`, `api_key`, `basic`) name a provider to sign in to, which only VisualAutomate's own apps do. A user's key goes in a `secret` property |
 | `timeoutMs` | number | Default 10000 on a canvas and 30000 in the push check, max 60000, and never more than the user's plan allows. The push check reads it here, not from the test file |
 | `memoryLimitMb` | number | Default 32, max 128 |
 | `action` | object | A declared step. See `declared-steps.md` |
-| `trigger` | object | A trigger. See `triggers.md` |
 
 `auth` may not contain `url`, `baseUrl`, `base_url` or `host`: refused outright.
 
@@ -63,10 +62,8 @@ The key is the name in code: property `title` is `config.title`.
 | `pattern` | For `string`: a regex the value must match, e.g. `"^https://"` |
 | `help` | Longer help, shown on request |
 | `disabled` | Shown but not editable |
-| `optionsFrom` | For `select`/`multiselect`: read the options from the account, `{ "connection": "account", "request": { "path": "…" }, "items": { "path": "…" }, "label": "{{item.name}}", "value": "{{item.id}}" }`. GET only |
 | `sentTo` | For `secret`: the properties that say where it is sent (a server URL); the stored key is kept only while they are unchanged |
 | `verbatim` | For `secret`: sent exactly as typed, never computed with |
-| `provider` | For `connection`: the provider id, e.g. `outlook`, `github`. A module inherits its app's |
 
 ### Types
 
@@ -82,7 +79,6 @@ The key is the name in code: property `title` is `config.title`.
 | `secret` | masked input for a key the user pastes | text; masked wherever shown |
 | `color` | colour picker | hex string |
 | `date` | date picker | ISO date |
-| `connection` | picker of the user's connected accounts | do not read it; use `context.connections.get("<name>")` |
 | `file` | picker over the account's storage | the file read: `{ name, contentType, size, contentBytes }`. For a PDF attachment, never a video |
 | `path` | the same picker | the path only, nothing read. What media steps take |
 | `paths` | the same picker, appending | several paths, one per line |
@@ -97,13 +93,15 @@ A field the user left empty may be missing: default it in code (`config.limit ??
 
 Return the name of one as `output`. `success` and `error` are what users expect; an error route on the canvas catches `error`. Add a port only for a third outcome a workflow should branch on (`duplicate`, `not_found`, `high`/`medium`/`low`).
 
-## Connections
+## No accounts
+
+Only VisualAutomate's own apps act as somebody's connected account. A step built here has no `connection` property, `optionsFrom`, `action.connection`, `trigger` or `auth.provider`, and `vsa test` refuses each of them. It reaches an API at its own address, with the user's key in a `secret` property:
 
 ```json
-"auth": { "type": "oauth2", "provider": "outlook" },
+"auth": { "type": "none" },
 "properties": {
-  "account": { "label": "Outlook account", "type": "connection", "provider": "outlook", "required": true }
+  "apiKey": { "label": "API key", "type": "secret", "required": true, "description": "Each user enters their own" }
 }
 ```
 
-In an app, the app holds the connection; each module still declares its `connection` property (it may omit `provider`, which it inherits).
+A declared step sends it in a header (`"Authorization": "Bearer {{config.apiKey}}"`, see `declared-steps.md`); code reads `config.apiKey`.

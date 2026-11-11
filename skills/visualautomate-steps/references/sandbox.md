@@ -88,7 +88,6 @@ So: no `import` (not even `import type`, or the word "import" followed by a spac
 
 - `fetch` may reach the hosts allowed for the plugin on the platform (a domain covers its subdomains), plus a host in the step's own configuration, such as a URL field. The manifest cannot widen this.
 - Never localhost, private networks or cloud metadata addresses.
-- A connected account is reached only through `context.connections`, under the provider's base URL.
 - Locally, `allowedDomains` in the test file applies the same rule; without it, `vsa test` lists every host the platform would refuse.
 
 ## Limits

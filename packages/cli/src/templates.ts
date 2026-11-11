@@ -50,7 +50,7 @@ const EXAMPLES = `
   // receives strict JSON.
   //
   // PROPERTY TYPES: string, number, boolean, select, multiselect, json,
-  // color, date, connection, file, path, paths.
+  // color, date, secret, file, path, paths.
   //
   //   "properties": {
   //     "mode": {
@@ -64,7 +64,7 @@ const EXAMPLES = `
   //       ]
   //     },
   //     "retries":    { "label": "Retries", "type": "number", "min": 0, "max": 5, "default": 2 },
-  //     "account":    { "label": "Account", "type": "connection", "provider": "outlook", "required": true },
+  //     "apiKey":     { "label": "API key", "type": "secret", "required": true, "description": "Each user enters their own" },
   //     "attachment": { "label": "Attachment", "type": "file", "description": "Read into config before the step runs -- right for a PDF" },
   //     "clip":       { "label": "Clip", "type": "path", "description": "Named, not read. What an ffmpeg step takes." },
   //     "advanced":   { "label": "Raw options", "type": "json", "group": "Advanced" }
@@ -85,19 +85,9 @@ const EXAMPLES = `
   //
   //   "timeoutMs": 60000,
   //
-  // A TRIGGER makes this a starting point: the platform polls for you and
-  // starts the workflow once per new item, so nothing is billed for waiting.
-  // "connection" must name one of your own properties of type "connection".
-  //
-  //   "trigger": {
-  //     "connection": "account",
-  //     "poll": 5,
-  //     "request": { "method": "GET", "path": "/me/messages", "query": { "$top": "25" } },
-  //     "items": "value",
-  //     "id": "id",
-  //     "cursor": { "from": "response", "path": "@odata.deltaLink" },
-  //     "hydrate": { "path": "/me/messages/{id}" }
-  //   }
+  // NO ACCOUNTS. Only VisualAutomate's own apps act as somebody's connected
+  // account, so there is no "connection" property and no "trigger" here: call
+  // the API at its own address with the key in a "secret" property.
 `
 
 /**
@@ -170,9 +160,8 @@ const httpRequest: Template = {
  * A step that calls an API the user holds their own key for.
  *
  * The key is a \`password\` property, so it is filled in on the canvas and never
- * lives in this code. If you are integrating a provider the platform already
- * connects to, use the "connection" template instead — then nobody pastes a key
- * at all.
+ * lives in this code. Only VisualAutomate's own apps act as a connected
+ * account, so this is how a step of yours reaches any API.
  */
 const plugin: PluginModule = {
     async execute(input, config) {
@@ -237,88 +226,6 @@ export default plugin
         },
     }),
     testInput: { config: { url: "https://api.github.com/repos/nodejs/node" } },
-}
-
-const connection: Template = {
-    description: "Act on an account the user already connected.",
-    category: "integration",
-    code: `import type { PluginModule } from "./visualautomate"
-
-/**
- * A step that acts as one of the user's connected accounts.
- *
- * You never see a token and you never name a host. You name a path, and the
- * platform attaches the credential on the way past — which is what stops a
- * plugin pointing somebody's account at an address of its own choosing.
- *
- * \`connections.get\` takes the name of one of YOUR properties ("account"
- * below), not a connection id, so this step can only reach the account it was
- * configured with.
- */
-const plugin: PluginModule = {
-    async execute(input, config, context) {
-        if (!context.connections) {
-            return { output: "error", data: { error: "No account is connected to this step." } }
-        }
-
-        const account = await context.connections.get("account")
-
-        const response = await account.request({
-            method: "GET",
-            path: (config.path as string) || "/me/messages",
-            query: { $top: String(config.limit ?? 10) },
-        })
-
-        if (!response.ok) {
-            return {
-                output: "error",
-                data: { error: \`The provider answered \${response.status}\`, status: response.status },
-            }
-        }
-
-        const body = response.body as { value?: unknown[] }
-        return {
-            output: "success",
-            data: { items: body.value ?? [], count: (body.value ?? []).length },
-        }
-    },
-}
-
-export default plugin
-`,
-    manifest: manifestFile({
-        description: "Read from a connected account",
-        icon: "link",
-        auth: { type: "oauth2", provider: "outlook" },
-        properties: {
-            account: {
-                label: "Account",
-                type: "connection",
-                provider: "outlook",
-                required: true,
-                description: "The account this step acts as",
-            },
-            path: {
-                label: "Path",
-                type: "string",
-                required: false,
-                default: "/me/messages",
-                description: "Relative to the provider's base URL. Never a full URL.",
-            },
-            limit: { label: "How many", type: "number", required: false, default: 10, min: 1, max: 100 },
-        },
-        inputs: ["input"],
-        outputs: ["success", "error"],
-        outputFields: {
-            items: "What the provider returned",
-            count: "How many items came back",
-        },
-    }),
-    testInput: {
-        config: { path: "/me/messages", limit: 2 },
-        // context.connections cannot be simulated honestly, so `test` refuses
-        // it. Stub it in a test of your own to exercise the code around it.
-    },
 }
 
 const file: Template = {
@@ -395,7 +302,6 @@ export default plugin
 export const TEMPLATES = {
     blank,
     "http-request": httpRequest,
-    connection,
     file,
 } satisfies Record<string, Template>
 

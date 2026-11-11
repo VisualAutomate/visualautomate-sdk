@@ -221,6 +221,10 @@ export interface SimulateOptions {
      * Give `connections` a fake that answers the requests your plugin makes,
      * and assert on what it was asked for — that is a better test of an
      * integration step than any simulation of a provider would be.
+     *
+     * @deprecated for `connections`: only VisualAutomate's own apps act as a
+     * connected account, so a step you build is never given one. Stub `fetch`
+     * through loadPluginCode instead.
      */
     connections?: PluginConnections
     media?: PluginMedia

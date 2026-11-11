@@ -29,6 +29,7 @@ import { homedir } from "node:os"
 
 import { build, stop as stopBundler } from "esbuild"
 import {
+    ACCOUNTS_ARE_OURS,
     checkManifest,
     executeOf,
     loadPluginCode,
@@ -308,11 +309,8 @@ async function runTarget(target: Target, flags: Flags, several: boolean): Promis
         if (!shape.ok) return false
 
         if (target.entry === null) {
-            if (shape.kind === "trigger") {
-                say(`${green(bold("✓ checked"))}  ${dim("a trigger: the manifest is sound")}`)
-                say(dim("           Not run here. A push publishes only a module with an index.js that passes its test, so this one cannot be published from GitHub."))
-                return true
-            }
+            // A trigger never gets here: it watches an account, so checkManifest
+            // refuses it, and only VisualAutomate's own apps have one.
             const what = shape.kind === "outputs-only" ? "a declared step with no request" : "a declared step"
             say(`${green(bold("✓ checked"))}  ${dim(`${what}: the manifest is sound`)}`)
             say(dim("           Not run here, and not published from GitHub. On the developer portal: New module → Call an API,"))
@@ -344,14 +342,6 @@ async function runTarget(target: Target, flags: Flags, several: boolean): Promis
 
         const outputs = Array.isArray(manifest.outputs) ? (manifest.outputs as string[]) : ["success", "error"]
         const expected = settings.expectOutput ?? PUSH_CHECK.defaultExpectOutput
-
-        // Account properties: the push check acts as an account only when the test
-        // file names it, and here there is no account at all.
-        const properties = (manifest.properties ?? {}) as Record<string, { type?: unknown }>
-        const accountProperties = Object.keys(properties).filter((name) => properties[name]?.type === "connection")
-        const config = (settings.config ?? {}) as Record<string, unknown>
-        const named = accountProperties.filter((name) => typeof config[name] === "string" && String(config[name]).trim())
-        const unnamed = accountProperties.filter((name) => !named.includes(name))
 
         const persist = persistEnabled(target.dir, flags.persist)
         const kept = persist ? await loadPersisted(target.dir) : { storage: {}, state: {} }
@@ -409,16 +399,6 @@ async function runTarget(target: Target, flags: Flags, several: boolean): Promis
             )
         }
 
-        if (named.length > 0) {
-            say(dim(`account  the test file names an account for ${named.join(", ")}. The push check acts as it; here there is none, so the step ran without it.`))
-        }
-        if (unnamed.length > 0 && expected === "success") {
-            say(yellow(
-                `! ${unnamed.join(", ")} ${unnamed.length > 1 ? "are account properties" : "is an account property"} the test file names no account for. `
-                + `The push check then runs without an account, and publishing needs a run that comes back on success. `
-                + `Put the id of one of your connected accounts under config (the module's page on the portal lists them).`,
-            ))
-        }
         if (passed && expected !== "success") {
             say(dim("note     a pass that is not on success does not count for publishing: that needs one push whose test comes back on success."))
         }
@@ -632,6 +612,10 @@ async function cmdAddProperty(args: string[], flags: Flags): Promise<void> {
             + `Types: ${PROPERTY_TYPES.join(", ")}`,
         )
     }
+    if (type === "connection") {
+        // Only VisualAutomate's own apps act as a connected account.
+        fail(`There is no connection property for your steps. ${ACCOUNTS_ARE_OURS}.`)
+    }
     if (!isPropertyType(type)) {
         fail(`There is no "${type}" property. Types: ${PROPERTY_TYPES.join(", ")}`)
     }
@@ -670,7 +654,6 @@ async function cmdAddProperty(args: string[], flags: Flags): Promise<void> {
             label: flags.label,
             required: flags.required === "true",
             options: flags.options,
-            provider: flags.provider,
         })
         next = withMember(text, "properties", name, property)
     } catch (error) {
@@ -829,7 +812,6 @@ Options for \`add:property\`:
   --required           the workflow will not run without it
   --label <text>       instead of one made from the name
   --options <list>     for select and multiselect: "Fast:fast,Thorough:thorough"
-  --provider <name>    for connection: whose account this is
 
 Property types: ${PROPERTY_TYPES.join(", ")}
 

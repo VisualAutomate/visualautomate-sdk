@@ -54,6 +54,34 @@ const isRelativePath = (path: unknown): boolean =>
  * Check `raw`, the parsed manifest.json. `hasCode` says whether an index.js
  * (or plugin.ts) sits beside it.
  */
+/**
+ * Why a developer's step cannot use a connected account, and what to do instead.
+ *
+ * Only VisualAutomate's own apps act as somebody's mailbox, workspace or store.
+ * A step built with this SDK reaches an API at its own address, with a key the
+ * user enters in a `secret` property.
+ */
+export const ACCOUNTS_ARE_OURS =
+    'Only VisualAutomate\'s own apps act as a connected account: call the API at its own address instead (action.baseUrl, or fetch in code), with a key the user enters in a property of type "secret"'
+
+/** Each way a manifest would use a connected account, in words. Empty when it uses none. */
+export function accountUseIn(manifest: unknown): string[] {
+    if (!isObject(manifest)) return []
+    const m = manifest as Record<string, unknown>
+    const uses: string[] = []
+    if (isObject(m.properties)) {
+        for (const [key, value] of Object.entries(m.properties)) {
+            if (!isObject(value)) continue
+            if (value.type === "connection") uses.push(`properties.${key} is a connection: an account to act as`)
+            if (value.optionsFrom !== undefined) uses.push(`properties.${key}.optionsFrom reads its options as an account`)
+        }
+    }
+    if (isObject(m.action) && m.action.connection !== undefined) uses.push("action.connection makes the call as an account")
+    if (m.trigger !== undefined) uses.push("trigger watches an account")
+    if (isObject(m.auth) && typeof m.auth.provider === "string" && m.auth.provider) uses.push(`auth.provider names "${m.auth.provider}"`)
+    return uses
+}
+
 export function checkManifest(raw: unknown, hasCode: boolean): ManifestCheck {
     const errors: string[] = []
     const warnings: string[] = []
@@ -107,6 +135,10 @@ export function checkManifest(raw: unknown, hasCode: boolean): ManifestCheck {
         else {
             if (typeof m.auth.type !== "string" || !AUTH_TYPES.has(m.auth.type)) {
                 errors.push(`auth.type must be one of ${[...AUTH_TYPES].join(", ")}.`)
+            } else if (m.auth.type !== "none" && !m.auth.provider) {
+                // The platform wants a provider for every other type, and a
+                // provider is an account to act as, which accountUseIn refuses.
+                errors.push(`auth.type "${m.auth.type}" needs a provider to sign in to, and only VisualAutomate's own apps name one: use { "type": "none" } and take the user's key in a property of type "secret".`)
             }
             for (const key of HOST_KEYS) {
                 if (key in m.auth) errors.push(`auth.${key} is refused: a manifest may not name a host. The provider's base URL belongs to the platform.`)
@@ -145,6 +177,11 @@ export function checkManifest(raw: unknown, hasCode: boolean): ManifestCheck {
     if (kind === "code" && !hasCode) {
         errors.push("There is no index.js and no action or trigger block, so this step has nothing to run.")
     }
+
+    // Only VisualAutomate's own apps act as a connected account: the platform
+    // refuses a developer's step that names one, and the portal will not save
+    // or publish it. So each way in is an error here, not a warning.
+    for (const use of accountUseIn(m)) errors.push(`${use}. ${ACCOUNTS_ARE_OURS}`)
 
     return { ok: errors.length === 0, kind, errors, warnings }
 }

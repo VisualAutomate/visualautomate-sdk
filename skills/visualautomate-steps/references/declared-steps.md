@@ -4,27 +4,23 @@ One HTTP request described in the manifest, made by the platform. No `index.js`,
 
 **Where it lives.** A declared module is not published from GitHub: a push publishes only code. It is created on the developer portal with **New module → Call an API**, and its `manifest.json` is edited on the module's action page, as a form or as JSON (both edit the same file). So write the manifest, keep a copy in the repository if you like (`modules/<slug>/manifest.json`), check it with `vsa test`, and paste it into the portal.
 
-`vsa test` checks the manifest (connection or `baseUrl`, a relative path, `https://`, no `{{input}}` in `baseUrl`, items and pages) but does not run it. The action page runs it with **Test the call** ("Save and test" while there are unsaved changes), against an account the user picks. Publishing needs a test that came back on the success port, on the saved version. `$map` and `$if` cannot be edited in the form; paste them in the JSON.
+`vsa test` checks the manifest (an `https://` `baseUrl` with no `{{input}}`, a relative path, items and pages) but does not run it. The action page runs it with **Test the call** ("Save and test" while there are unsaved changes), with a real key filled in for the test. Publishing needs a test that came back on the success port, on the saved version. `$map` and `$if` cannot be edited in the form; paste them in the JSON.
 
 ## Shape
 
 ```json
 "action": {
-  "connection": "account",
+  "baseUrl": "https://api.example.com/v1",
   "request": {
     "method": "POST",
-    "path": "v1.0/me/sendMail",
+    "path": "messages",
     "query": {},
-    "headers": {},
+    "headers": { "Authorization": "Bearer {{config.apiKey}}" },
     "body": {
-      "message": {
-        "subject": "{{config.subject}}",
-        "body": {
-          "contentType": { "$if": "{{config.isHtml}}", "then": "HTML", "else": "Text" },
-          "content": "{{config.body}}"
-        },
-        "toRecipients": { "$map": "{{config.to | list}}", "to": { "emailAddress": { "address": "{{item}}" } } }
-      }
+      "subject": "{{config.subject}}",
+      "format": { "$if": "{{config.isHtml}}", "then": "html", "else": "text" },
+      "content": "{{config.body}}",
+      "recipients": { "$map": "{{config.to | list}}", "to": { "email": "{{item}}" } }
     }
   },
   "errorPath": "error.message",
@@ -34,8 +30,7 @@ One HTTP request described in the manifest, made by the platform. No `index.js`,
 
 | Key | Notes |
 | --- | --- |
-| `connection` | Name of your `connection` property. The request goes as that account, under the provider's base URL |
-| `baseUrl` | For an API without a connection: `"https://api.example.com/v1"`. `https://` only. May use `{{config.…}}`, never `{{input.…}}`. Exactly one of `connection`/`baseUrl` when there is a request |
+| `baseUrl` | The API's host, e.g. `"https://api.example.com/v1"`. `https://` only. May use `{{config.…}}`, never `{{input.…}}`. Required when there is a request: only VisualAutomate's own apps make a call as a connected account (`connection`) |
 | `request.method` | `GET`, `POST`, `PUT`, `PATCH`, `DELETE` |
 | `request.path` | Relative to the base URL. Never a full URL |
 | `request.query`, `request.headers`, `request.body` | Values may contain tokens |
@@ -117,7 +112,7 @@ Stops at `limit`, an empty page, `more` false, no next value, or `maxPages` (def
 ## Checklist (nothing runs it for you)
 
 - The JSON parses, and every `{{config.x}}` names a property that exists.
-- `connection` names a property of type `connection`; or `baseUrl` is `https://` and reads no `input`.
-- `path` is relative; no Authorization header for a connection.
+- `baseUrl` is `https://` and reads no `input`; there is no `connection`.
+- `path` is relative, and the key goes in a header from a `secret` property.
 - `outputs` covers every key in `outputFields`, and `errorPath`/`okPath` match the provider's documented error shape.
 - Lists have `items` with a `limit`.

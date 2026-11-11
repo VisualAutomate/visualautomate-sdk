@@ -58,7 +58,6 @@ The fields, by property name, with data bubbles already resolved. Types as in `m
 | `secrets` | values set for the plugin itself, e.g. `context.secrets.API_KEY`. Not the user's credentials | always, may be empty |
 | `storage` | the account's files | always |
 | `state` | values that outlive one run, per workflow | always |
-| `connections` | the accounts chosen on this step | only with a `connection` property and a chosen account |
 | `media` | ffmpeg | only where the platform has it configured |
 
 ### `context.storage`
@@ -88,25 +87,6 @@ Decode text with `new TextDecoder().decode(bytes)`.
 | `list(prefix?)` | `{ keys: [{ key, expiresAt }], complete }`: each key with when it expires (`null` for never); `complete` is false when there were more |
 
 For cursors, seen-ids (keep them bounded: `seen.slice(-500)`), counters, short locks. Large data goes in storage, with its path in state.
-
-### `context.connections`
-
-```js
-if (!context.connections) {
-  return { output: "error", data: { error: "No account was chosen for this step." } }
-}
-const account = await context.connections.get("account")   // YOUR property's name, not an id
-const res = await account.request({
-  method: "GET",               // GET, POST, PUT, PATCH, DELETE
-  path: "user/repos",          // relative to the provider: never a full URL
-  query: { per_page: 10 },
-  headers: {},                 // never an Authorization header: the platform adds it
-  body: undefined,
-})
-// res: { ok, status, headers?, body }  (the provider's own reply, body parsed when JSON)
-```
-
-There is no way to read the token, and no way to choose the host. `context.connections` is absent when no account was chosen, which is also how `vsa test` runs a step locally: check for it. For the push check, and for publishing, name an account in the test file's `config` (see `test-and-publish.md`).
 
 ### `context.media`
 

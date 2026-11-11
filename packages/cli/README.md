@@ -33,7 +33,7 @@ tsconfig.json        so your editor type-checks it
 AGENTS.md, CLAUDE.md the platform's rules, for an AI assistant working here
 ```
 
-Templates: `blank`, `http-request`, `connection`, `file`. Pass one with
+Templates: `blank`, `http-request`, `file`. Pass one with
 `--template`. Each runs unmodified.
 
 ## Types in your editor
@@ -95,8 +95,8 @@ and the default is stored as its type has it, so `2` is a number and `false` is 
 boolean.
 
 Types: `string`, `number`, `boolean`, `select`, `multiselect`, `json`, `code`,
-`secret`, `color`, `date`, `connection`, `file`, `path`, `paths`. A `select` or `multiselect` needs
-`--options`, and a `connection` needs `--provider <name>`.
+`secret`, `color`, `date`, `file`, `path`, `paths`. A `select` or `multiselect` needs
+`--options`. There is no `connection`: only VisualAutomate's own apps act as a connected account.
 
 The same field is added to `visualautomate.test.json` under `config`, with its
 default or a value of the right shape, so the next `vsa test` passes something
@@ -111,11 +111,12 @@ comments, the examples underneath and your own formatting stay as they are.
 The developer portal's check on a push, run here. In order:
 
 0. **The manifest.** The rules the portal is known to refuse, and warnings for
-   what it would drop: an `auth` that names a host, an `action` with both a
-   connection and a `baseUrl`, a request path that is a full URL, a trigger
-   without `items` or without `"initial": "now"`. A declared step (an `action`
-   block) or a trigger stops here, checked: the platform does not run those on a
-   push either. A declared step is published from the portal, not GitHub: New
+   what it would drop: an `auth` that names a host, a `baseUrl` that is not
+   `https://`, a request path that is a full URL. And anything that would act as
+   a connected account -- a `connection` property, `optionsFrom`,
+   `action.connection`, a `trigger`, `auth.provider` -- which only VisualAutomate's
+   own apps may do. A declared step (an `action` block) stops here, checked: the
+   platform does not run it on a push either. A declared step is published from the portal, not GitHub: New
    module → Call an API, paste its manifest.json, Test the call, publish.
 1. **The platform's code checks.** The same rules the upload applies: only
    allowed packages in `require`, no dynamic `require`, none of the refused
@@ -198,11 +199,10 @@ sandbox image the first time, runs every module, and runs them again on every
 save. Only the module whose folder changed runs again; a change anywhere else
 runs them all. Ctrl+C stops it.
 
-`context.connections` and `context.media` are **not** simulated. One is
-somebody's OAuth account and the other is an ffmpeg container; pretending to be
-either would produce a plugin that passes here and fails on a canvas. There is
-no account here, so `context.connections` is absent, as it is on the platform
-when no account is chosen; `context.media` fails with a sentence saying so.
+`context.media` is **not** simulated: it is an ffmpeg container, and pretending
+to be one would produce a plugin that passes here and fails on a canvas. It fails
+with a sentence saying so. There is no `context.connections` for your steps: only
+VisualAutomate's own apps act as a connected account.
 
 `visualautomate.test.json` (or `test.json`, or `--input <file>`) seeds the run:
 

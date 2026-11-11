@@ -221,7 +221,14 @@ export interface PluginContext {
     state: PluginState
     /** ffmpeg. Absent when the server has no sandbox or storage configured. */
     media?: PluginMedia
-    /** The accounts this step was configured with. Absent when it has none. */
+    /**
+     * The accounts this step was configured with. Absent when it has none.
+     *
+     * @deprecated Only VisualAutomate's own apps act as a connected account, so
+     * a step you build never has this: the platform refuses a step that names
+     * an account. Take the user's key in a property of type "secret" and send
+     * it to the API's own host with fetch.
+     */
     connections?: PluginConnections
 }
 

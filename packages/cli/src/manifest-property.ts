@@ -27,7 +27,6 @@ export const PROPERTY_TYPES = [
     "secret",
     "color",
     "date",
-    "connection",
     "file",
     "path",
     "paths",
@@ -118,7 +117,6 @@ export interface PropertySpec {
     label?: string
     required?: boolean
     options?: string
-    provider?: string
 }
 
 /**
@@ -142,13 +140,6 @@ export function buildProperty(spec: PropertySpec): Record<string, unknown> {
             )
         }
         property.options = options
-    }
-
-    if (spec.type === "connection") {
-        if (!spec.provider) {
-            throw new Error('A connection needs the provider it is for: --provider outlook.')
-        }
-        property.provider = spec.provider
     }
 
     if (spec.required) property.required = true

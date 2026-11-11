@@ -27,5 +27,5 @@ export {
     SIGNED_URL_SECONDS,
     STATE_LIMITS,
 } from "./platform-rules"
-export { checkManifest, type ManifestCheck, type StepKind } from "./manifest-check"
+export { ACCOUNTS_ARE_OURS, accountUseIn, checkManifest, type ManifestCheck, type StepKind } from "./manifest-check"
 export { CONTEXT_API, BLOCKED_GLOBALS, type ContextApiEntry } from "./context-api"

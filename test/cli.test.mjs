@@ -304,7 +304,7 @@ test("add:property says what is wrong instead of writing something broken", () =
         [["add:property", "strng", "x"], /no "strng" property/],
         [["add:property", "number", "n", "how many", "abc"], /not a number/],
         [["add:property", "select", "s", "which"], /needs its choices/],
-        [["add:property", "connection", "c", "whose"], /needs the provider/],
+        [["add:property", "connection", "c", "whose"], /no connection property for your steps/],
         [["add:property", "string", "api-key"], /not a name your code can read/],
         [["add:property", "string", "message"], /already has a property called message/],
         [["add:property"], /What property\?/],
